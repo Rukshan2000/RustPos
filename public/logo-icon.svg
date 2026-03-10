@@ -1,0 +1,36 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <circle cx="100" cy="100" r="100" fill="#4F46E5"/>
+  
+  <!-- Main cash register shape -->
+  <g transform="translate(100, 100)">
+    <!-- Register body -->
+    <rect x="-40" y="-32" width="80" height="64" rx="8" fill="#FFFFFF" opacity="0.95"/>
+    
+    <!-- Display screen -->
+    <rect x="-36" y="-26" width="72" height="18" rx="4" fill="#0F172A"/>
+    
+    <!-- Display text (price) -->
+    <text x="0" y="-12" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#10B981" text-anchor="middle">$99.99</text>
+    
+    <!-- Keypad buttons -->
+    <g id="keypad">
+      <!-- Row 1 -->
+      <rect x="-28" y="0" width="8" height="8" rx="2" fill="#4F46E5"/>
+      <rect x="-16" y="0" width="8" height="8" rx="2" fill="#4F46E5"/>
+      <rect x="-4" y="0" width="8" height="8" rx="2" fill="#4F46E5"/>
+      <rect x="8" y="0" width="8" height="8" rx="2" fill="#4F46E5"/>
+      
+      <!-- Row 2 -->
+      <rect x="-28" y="12" width="8" height="8" rx="2" fill="#4F46E5"/>
+      <rect x="-16" y="12" width="8" height="8" rx="2" fill="#4F46E5"/>
+      <rect x="-4" y="12" width="8" height="8" rx="2" fill="#4F46E5"/>
+      <rect x="8" y="12" width="8" height="8" rx="2" fill="#4F46E5"/>
+    </g>
+    
+    <!-- Drawer -->
+    <rect x="-32" y="26" width="64" height="6" rx="3" fill="#F59E0B"/>
+    <circle cx="-18" cy="29" r="2" fill="#D97706"/>
+    <circle cx="18" cy="29" r="2" fill="#D97706"/>
+  </g>
+</svg>

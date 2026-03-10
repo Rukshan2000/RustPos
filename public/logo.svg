@@ -1,0 +1,50 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#F8FAFC" stroke="#4F46E5" stroke-width="2"/>
+  
+  <!-- Main cash register shape -->
+  <g transform="translate(100, 100)">
+    <!-- Register body -->
+    <rect x="-45" y="-35" width="90" height="70" rx="8" fill="#4F46E5"/>
+    
+    <!-- Display screen -->
+    <rect x="-40" y="-28" width="80" height="22" rx="4" fill="#0F172A"/>
+    
+    <!-- Display text (price) -->
+    <text x="0" y="-8" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#10B981" text-anchor="middle">$99.99</text>
+    
+    <!-- Keypad -->
+    <g id="keypad">
+      <!-- Row 1 -->
+      <rect x="-32" y="-2" width="10" height="10" rx="2" fill="#60A5FA"/>
+      <rect x="-18" y="-2" width="10" height="10" rx="2" fill="#60A5FA"/>
+      <rect x="-4" y="-2" width="10" height="10" rx="2" fill="#60A5FA"/>
+      <rect x="10" y="-2" width="10" height="10" rx="2" fill="#60A5FA"/>
+      
+      <!-- Row 2 -->
+      <rect x="-32" y="12" width="10" height="10" rx="2" fill="#60A5FA"/>
+      <rect x="-18" y="12" width="10" height="10" rx="2" fill="#60A5FA"/>
+      <rect x="-4" y="12" width="10" height="10" rx="2" fill="#60A5FA"/>
+      <rect x="10" y="12" width="10" height="10" rx="2" fill="#60A5FA"/>
+    </g>
+    
+    <!-- Drawer handle (represents cash drawer) -->
+    <rect x="-35" y="40" width="70" height="8" rx="4" fill="#F59E0B"/>
+    <circle cx="-20" cy="44" r="3" fill="#D97706"/>
+    <circle cx="20" cy="44" r="3" fill="#D97706"/>
+    
+    <!-- Shopping cart accent on right -->
+    <g transform="translate(55, -10)">
+      <path d="M -8 0 L -5 8 L 8 8 L 10 0 M -5 8 L 8 8" stroke="#10B981" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="-2" cy="12" r="1.5" fill="#10B981"/>
+      <circle cx="6" cy="12" r="1.5" fill="#10B981"/>
+    </g>
+  </g>
+  
+  <!-- Decorative elements -->
+  <circle cx="30" cy="30" r="4" fill="#4F46E5" opacity="0.3"/>
+  <circle cx="170" cy="170" r="5" fill="#10B981" opacity="0.3"/>
+  
+  <!-- Text below (optional) -->
+  <text x="100" y="185" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#4F46E5" text-anchor="middle">POS SYSTEM</text>
+</svg>

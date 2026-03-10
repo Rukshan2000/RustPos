@@ -1,0 +1,33 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="200" height="200" fill="#F8FAFC"/>
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#4F46E5" stroke-width="2"/>
+  
+  <!-- Modern POS design -->
+  <g transform="translate(100, 100)">
+    <!-- Receipt/Bill icon -->
+    <g id="receipt">
+      <rect x="-28" y="-45" width="56" height="80" rx="4" fill="#4F46E5"/>
+      <line x1="-20" y1="-38" x2="20" y2="-38" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <line x1="-20" y1="-28" x2="20" y2="-28" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="-20" y1="-20" x2="20" y2="-20" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="-20" y1="-12" x2="20" y2="-12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="-20" y1="-4" x2="20" y2="-4" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="-20" y1="4" x2="20" y2="4" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+      <line x1="-20" y1="12" x2="20" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="-15" cy="25" r="3" fill="#10B981"/>
+      <circle cx="15" cy="25" r="3" fill="#10B981"/>
+    </g>
+    
+    <!-- Shopping cart accent -->
+    <g transform="translate(35, 0)">
+      <path d="M -10 -8 L -8 8 L 10 8 L 12 -8 M -8 8 L 10 8" stroke="#10B981" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="-5" cy="14" r="2" fill="#10B981"/>
+      <circle cx="8" cy="14" r="2" fill="#10B981"/>
+      <circle cx="2" cy="-10" r="3" fill="#F59E0B"/>
+    </g>
+  </g>
+  
+  <!-- Text label -->
+  <text x="100" y="165" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#4F46E5" text-anchor="middle" letter-spacing="0.5">SALES POINT</text>
+</svg>
