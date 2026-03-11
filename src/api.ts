@@ -169,6 +169,7 @@ export const api = {
   }),
   backupDb: () => invoke<string>("backup_db"),
   restoreDb: (backupPath: string) => invoke<void>("restore_db", { backupPath }),
+  resetDb: () => invoke<void>("reset_db"),
   
   getDailySales: () => invoke<number>("get_daily_sales"),
 

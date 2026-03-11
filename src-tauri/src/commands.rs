@@ -451,6 +451,40 @@ pub fn get_daily_sales(state: State<DbState>) -> Result<f64, String> {
     Ok(total)
 }
 
+#[tauri::command]
+pub fn reset_db(state: State<DbState>) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    
+    // Wipe all tables
+    conn.execute_batch(
+        "DELETE FROM sale_items;
+         DELETE FROM sales;
+         DELETE FROM products;
+         DELETE FROM categories;
+         DELETE FROM users;
+         DELETE FROM settings;
+         
+         DELETE FROM sqlite_sequence;" // resets autoincrement IDs
+    ).map_err(|e| e.to_string())?;
+
+    // Re-insert default settings
+    conn.execute(
+        "INSERT INTO settings (id, shop_name, receipt_text, font_size_header, font_size_body, font_size_footer, currency) 
+         VALUES (1, 'My Awesome Shop', 'Thank you for shopping with us!', 24, 14, 12, '$')",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    // Re-insert default admin
+    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let default_hash = crate::db::hash_password("admin", "admin");
+    conn.execute(
+        "INSERT INTO users (username, password_hash, role, is_active, is_default_password, created_at) VALUES ('admin', ?1, 'admin', 1, 1, ?2)",
+        rusqlite::params![default_hash, now],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 // --- Auth / Users ---
 
 #[tauri::command]

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Package, AlertTriangle, DollarSign, ArrowRight } from 'lucide-react';
+import { ShoppingCart, Package, AlertTriangle, DollarSign, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, DashboardStats } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTranslation } from 'react-i18next';
 
 const Dashboard: React.FC = () => {
   const { currency } = useSettings();
+  const { t } = useTranslation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
@@ -21,100 +23,361 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const hasAlerts = (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0;
+
   return (
-    <div className="animate-fade-in">
-      <div style={{ marginBottom: '2.5rem' }}>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.025em' }}>Dashboard</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', fontWeight: 500 }}>Welcome back! Here's what's happening today.</p>
-      </div>
+    <>
+      <style>{`
+        
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-        <div className="card" style={{ background: 'linear-gradient(135deg, var(--primary) 0%, #6366f1 100%)', color: 'white', border: 'none', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ opacity: 0.9, fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Today's Revenue</div>
-            <div style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.05em' }}>{currency}{stats?.today_sales.toFixed(2) || '0.00'}</div>
-          </div>
-          <DollarSign size={120} style={{ position: 'absolute', right: '-20px', bottom: '-20px', opacity: 0.1 }} />
+        .dash-root {
+          font-family: 'Nunito', sans-serif;
+          padding: 2rem;
+          animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dash-header {
+          margin-bottom: 2.25rem;
+        }
+
+        .dash-title {
+          font-size: 2rem;
+          font-weight: 800;
+          color: #1a3528;
+          letter-spacing: -0.02em;
+          margin: 0 0 0.25rem;
+        }
+
+        .dash-subtitle {
+          color: #7a9e8a;
+          font-size: 0.95rem;
+          font-weight: 500;
+          margin: 0;
+        }
+
+        /* ── Stat Cards Grid ── */
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 1.25rem;
+          margin-bottom: 2rem;
+        }
+
+        .stat-card {
+          background: #f5f0e8;
+          border-radius: 1.25rem;
+          padding: 1.5rem;
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 2px 12px rgba(45,90,61,0.07);
+        }
+
+        .stat-card-revenue {
+          background: #2d5a3d;
+        }
+
+        .stat-label {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: #7a9e8a;
+          margin-bottom: 0.5rem;
+        }
+
+        .stat-label-light {
+          color: rgba(232, 244, 236, 0.7);
+        }
+
+        .stat-value {
+          font-size: 2.1rem;
+          font-weight: 800;
+          color: #1a3528;
+          letter-spacing: -0.04em;
+          line-height: 1;
+        }
+
+        .stat-value-light {
+          color: #e8f4ec;
+        }
+
+        .stat-value-danger {
+          color: #c05050;
+        }
+
+        .stat-icon-wrap {
+          width: 48px;
+          height: 48px;
+          border-radius: 0.875rem;
+          background: #edeae0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .stat-icon-wrap-danger {
+          background: #fdf0f0;
+        }
+
+        .stat-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .stat-bg-icon {
+          position: absolute;
+          right: -16px;
+          bottom: -16px;
+          opacity: 0.08;
+          color: #e8f4ec;
+        }
+
+        /* ── Bottom Cards ── */
+        .bottom-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1.25rem;
+        }
+
+        @media (max-width: 640px) {
+          .bottom-grid { grid-template-columns: 1fr; }
+        }
+
+        .action-card {
+          background: #f5f0e8;
+          border-radius: 1.25rem;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          box-shadow: 0 2px 12px rgba(45,90,61,0.07);
+        }
+
+        .action-card-alert {
+          background: #fdf5f5;
+        }
+
+        .action-icon-wrap {
+          width: 48px;
+          height: 48px;
+          background: #e6ede8;
+          border-radius: 0.875rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1.25rem;
+        }
+
+        .action-icon-wrap-alert {
+          background: #fde8e8;
+        }
+
+        .action-title {
+          font-size: 1.35rem;
+          font-weight: 800;
+          color: #1a3528;
+          margin: 0 0 0.4rem;
+        }
+
+        .action-title-alert {
+          color: #7a2020;
+        }
+
+        .action-desc {
+          color: #7a9e8a;
+          font-size: 0.92rem;
+          line-height: 1.5;
+          margin: 0 0 1.75rem;
+        }
+
+        .alert-row {
+          display: flex;
+          flex-direction: column;
+          gap: 0.6rem;
+          margin-bottom: 1.75rem;
+        }
+
+        .alert-item {
+          color: #7a9e8a;
+          font-size: 0.9rem;
+          margin: 0;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+
+        .btn-primary-green {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.875rem 1.25rem;
+          background: #2d5a3d;
+          color: #e8f4ec;
+          border: none;
+          border-radius: 0.875rem;
+          font-size: 0.975rem;
+          font-weight: 700;
+          font-family: 'Nunito', sans-serif;
+          cursor: pointer;
+          text-decoration: none;
+          transition: background 0.15s, transform 0.1s;
+          box-shadow: 0 4px 14px rgba(45,90,61,0.25);
+        }
+
+        .btn-primary-green:hover {
+          background: #245033;
+          transform: translateY(-1px);
+        }
+
+        .btn-outline-green {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.875rem 1.25rem;
+          background: transparent;
+          color: #c05050;
+          border: 1.5px solid #e8c0c0;
+          border-radius: 0.875rem;
+          font-size: 0.975rem;
+          font-weight: 700;
+          font-family: 'Nunito', sans-serif;
+          cursor: pointer;
+          text-decoration: none;
+          transition: background 0.15s, border-color 0.15s;
+        }
+
+        .btn-outline-green:hover {
+          background: #fdf0f0;
+        }
+
+        .btn-outline-neutral {
+          color: #2d5a3d;
+          border-color: #ddd8cc;
+        }
+
+        .btn-outline-neutral:hover {
+          background: #edeae0;
+        }
+      `}</style>
+
+      <div className="dash-root">
+        {/* Header */}
+        <div className="dash-header">
+          <h1 className="dash-title">{t('dashboard')}</h1>
+          <p className="dash-subtitle">{t('welcome_back')}</p>
         </div>
 
-        <div className="card" style={{ position: 'relative', overflow: 'hidden', padding: '1.75rem' }}>
-          <div className="flex-between">
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Orders Today</div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.05em' }}>{stats?.today_orders || 0}</div>
+        {/* Stat Cards */}
+        <div className="stats-grid">
+          {/* Revenue */}
+          <div className="stat-card stat-card-revenue">
+            <div className={`stat-label stat-label-light`}>{t('todays_revenue')}</div>
+            <div className={`stat-value stat-value-light`}>
+              {currency}{stats?.today_sales.toFixed(2) || '0.00'}
             </div>
-            <div style={{ width: '56px', height: '56px', background: '#eef2ff', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ShoppingCart size={28} color="var(--primary)" />
-            </div>
+            <DollarSign size={100} className="stat-bg-icon" style={{ position: 'absolute', right: -16, bottom: -16, opacity: 0.1, color: '#e8f4ec' }} />
           </div>
-        </div>
 
-        <div className="card" style={{ position: 'relative', overflow: 'hidden', padding: '1.75rem' }}>
-          <div className="flex-between">
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Low Stock</div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: (stats?.low_stock_count || 0) > 0 ? 'var(--danger)' : 'var(--text-main)', letterSpacing: '-0.05em' }}>
-                {stats?.low_stock_count || 0}
+          {/* Orders */}
+          <div className="stat-card">
+            <div className="stat-row">
+              <div>
+                <div className="stat-label">{t('orders_today')}</div>
+                <div className="stat-value">{stats?.today_orders || 0}</div>
+              </div>
+              <div className="stat-icon-wrap">
+                <ShoppingCart size={24} color="#2d5a3d" />
               </div>
             </div>
-            <div style={{ width: '56px', height: '56px', background: (stats?.low_stock_count || 0) > 0 ? '#fef2f2' : '#f8fafc', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertTriangle size={28} color={(stats?.low_stock_count || 0) > 0 ? 'var(--danger)' : 'var(--text-muted)'} />
-            </div>
           </div>
-        </div>
 
-        <div className="card" style={{ position: 'relative', overflow: 'hidden', padding: '1.75rem' }}>
-          <div className="flex-between">
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Expiring Soon</div>
-              <div style={{ fontSize: '2.25rem', fontWeight: 800, color: (stats?.expiring_soon_count || 0) > 0 ? 'var(--danger)' : 'var(--text-main)', letterSpacing: '-0.05em' }}>
-                {stats?.expiring_soon_count || 0}
+          {/* Low Stock */}
+          <div className="stat-card">
+            <div className="stat-row">
+              <div>
+                <div className="stat-label">{t('low_stock')}</div>
+                <div className={`stat-value ${(stats?.low_stock_count || 0) > 0 ? 'stat-value-danger' : ''}`}>
+                  {stats?.low_stock_count || 0}
+                </div>
+              </div>
+              <div className={`stat-icon-wrap ${(stats?.low_stock_count || 0) > 0 ? 'stat-icon-wrap-danger' : ''}`}>
+                <AlertTriangle size={24} color={(stats?.low_stock_count || 0) > 0 ? '#c05050' : '#7a9e8a'} />
               </div>
             </div>
-            <div style={{ width: '56px', height: '56px', background: (stats?.expiring_soon_count || 0) > 0 ? '#fff1f2' : '#f8fafc', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Package size={28} color={(stats?.expiring_soon_count || 0) > 0 ? 'var(--danger)' : 'var(--text-muted)'} />
+          </div>
+
+          {/* Expiring Soon */}
+          <div className="stat-card">
+            <div className="stat-row">
+              <div>
+                <div className="stat-label">{t('expiring_soon')}</div>
+                <div className={`stat-value ${(stats?.expiring_soon_count || 0) > 0 ? 'stat-value-danger' : ''}`}>
+                  {stats?.expiring_soon_count || 0}
+                </div>
+              </div>
+              <div className={`stat-icon-wrap ${(stats?.expiring_soon_count || 0) > 0 ? 'stat-icon-wrap-danger' : ''}`}>
+                <Package size={24} color={(stats?.expiring_soon_count || 0) > 0 ? '#c05050' : '#7a9e8a'} />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '2rem', background: 'white', border: '2px solid var(--border)' }}>
-          <div>
-            <div style={{ width: '48px', height: '48px', background: 'rgba(79, 70, 229, 0.1)', color: 'var(--primary)', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-              <DollarSign size={24} />
+        {/* Bottom Action Cards */}
+        <div className="bottom-grid">
+          {/* Quick Sell */}
+          <div className="action-card">
+            <div>
+              <div className="action-icon-wrap">
+                <DollarSign size={22} color="#2d5a3d" />
+              </div>
+              <h3 className="action-title">{t('quick_sell')}</h3>
+              <p className="action-desc">{t('launch_pos_desc')}</p>
             </div>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--text-main)' }}>Quick Sell</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginBottom: '2rem' }}>Launch the point of sale interface to start a new transaction.</p>
+            <Link to="/sales" className="btn-primary-green">
+              {t('start_new_sale')} <ArrowRight size={18} />
+            </Link>
           </div>
-          <Link to="/sales" className="btn btn-primary" style={{ padding: '1rem', borderRadius: '1rem', fontSize: '1.125rem', fontWeight: 700, boxShadow: '0 10px 15px -3px rgba(79, 70, 229, 0.3)' }}>
-            Start New Sale <ArrowRight size={20} />
-          </Link>
-        </div>
 
-        <div className="card" style={{ background: (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0 ? '#fff1f2' : 'white', border: (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0 ? '2px solid #fecdd3' : '1px solid var(--border)', padding: '2rem' }}>
-          <div style={{ width: '48px', height: '48px', background: (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0 ? '#fecdd3' : '#f1f5f9', color: (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0 ? 'var(--danger)' : 'var(--text-muted)', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-            <AlertTriangle size={24} />
+          {/* Alerts */}
+          <div className={`action-card ${hasAlerts ? 'action-card-alert' : ''}`}>
+            <div>
+              <div className={`action-icon-wrap ${hasAlerts ? 'action-icon-wrap-alert' : ''}`}>
+                <AlertTriangle size={22} color={hasAlerts ? '#c05050' : '#7a9e8a'} />
+              </div>
+              <h3 className={`action-title ${hasAlerts ? 'action-title-alert' : ''}`}>{t('alerts_and_status')}</h3>
+              <div className="alert-row">
+                <p className="alert-item">
+                  {(stats?.low_stock_count || 0) > 0
+                    ? <><AlertCircle size={15} color="#c05050" /> <span>{stats?.low_stock_count} {t('items_running_low')}</span></>
+                    : <><CheckCircle2 size={15} color="#2d5a3d" /> <span>{t('all_products_well_stocked')}</span></>}
+                </p>
+                <p className="alert-item">
+                  {(stats?.expiring_soon_count || 0) > 0
+                    ? <><AlertCircle size={15} color="#c05050" /> <span>{stats?.expiring_soon_count} {t('items_expiring_soon')}</span></>
+                    : <><CheckCircle2 size={15} color="#2d5a3d" /> <span>{t('no_items_expiring_soon')}</span></>}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/inventory"
+              className={`btn-outline-green ${hasAlerts ? '' : 'btn-outline-neutral'}`}
+            >
+              {t('review_inventory')}
+            </Link>
           </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem', color: (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0 ? '#9f1239' : 'var(--text-main)' }}>Alerts & Status</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', margin: 0 }}>
-              {(stats?.low_stock_count || 0) > 0 
-                ? <span>⚠️ {stats?.low_stock_count} items running low on stock.</span>
-                : <span>✅ All products well-stocked.</span>}
-            </p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', margin: 0 }}>
-              {(stats?.expiring_soon_count || 0) > 0 
-                ? <span>⚠️ {stats?.expiring_soon_count} items expiring within 30 days.</span>
-                : <span>✅ No items expiring soon.</span>}
-            </p>
-          </div>
-          <Link to="/inventory" className="btn btn-outline" style={{ padding: '1rem', borderRadius: '1rem', fontSize: '1.125rem', fontWeight: 700, borderColor: (stats?.low_stock_count || 0) > 0 || (stats?.expiring_soon_count || 0) > 0 ? '#fecdd3' : 'var(--border)' }}>
-            Review Inventory
-          </Link>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

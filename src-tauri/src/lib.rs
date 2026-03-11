@@ -41,7 +41,8 @@ pub fn run() {
             update_user,
             delete_user,
             reset_user_password,
-            get_expiring_products
+            get_expiring_products,
+            reset_db
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

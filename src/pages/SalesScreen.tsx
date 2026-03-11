@@ -3,8 +3,10 @@ import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, Tag, X
 import { api, Product, Category, SaleItem, formatQtyUnit, priceUnitLabel } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTranslation } from 'react-i18next';
 
 const SalesScreen: React.FC = () => {
+  const { t } = useTranslation();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const { settings, currency } = useSettings();
@@ -18,54 +20,32 @@ const SalesScreen: React.FC = () => {
   const [cashReceived, setCashReceived] = useState('');
   const [loading, setLoading] = useState(false);
   const [showReceipt, setShowReceipt] = useState<{ id: number; invoice: string; items: any[]; total: number; billDiscount: number; totalProductDiscount: number } | null>(null);
-
-  // Custom quantity input modal
   const [qtyModal, setQtyModal] = useState<{ product: Product } | null>(null);
   const [qtyInput, setQtyInput] = useState('');
-
-  // Discount modal for items
   const [itemDiscountModal, setItemDiscountModal] = useState<{ productId: number; name: string; price: number; quantity: number; discountValue: number; discountType: 'percentage' | 'fixed' } | null>(null);
   const [itemDiscountInput, setItemDiscountInput] = useState('');
   const [itemDiscountType, setItemDiscountType] = useState<'percentage' | 'fixed'>('percentage');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const [pData, cData] = await Promise.all([
-        api.getProducts(),
-        api.getCategories()
-      ]);
+      const [pData, cData] = await Promise.all([api.getProducts(), api.getCategories()]);
       setProducts(pData);
       setCategories(cData);
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    }
+    } catch (error) { console.error('Failed to load data:', error); }
   };
 
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search);
-      const matchesCategory = selectedCategory ? p.category_id === selectedCategory : true;
-      return matchesSearch && matchesCategory;
-    });
-  }, [products, search, selectedCategory]);
+  const filteredProducts = useMemo(() => products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search);
+    const matchesCategory = selectedCategory ? p.category_id === selectedCategory : true;
+    return matchesSearch && matchesCategory;
+  }), [products, search, selectedCategory]);
 
   const handleProductClick = (product: Product) => {
-    if (product.stock <= 0) {
-      notify("Out of stock!", "warning");
-      return;
-    }
-    if (product.allow_decimal_quantity) {
-      // Show quantity input modal for weight/volume products
-      setQtyModal({ product });
-      setQtyInput('');
-    } else {
-      // Direct add for piece/packet
-      addToCart(product, 1);
-    }
+    if (product.stock <= 0) { notify("Out of stock!", "warning"); return; }
+    if (product.allow_decimal_quantity) { setQtyModal({ product }); setQtyInput(''); }
+    else addToCart(product, 1);
   };
 
   const addToCart = (product: Product, qty: number) => {
@@ -73,16 +53,10 @@ const SalesScreen: React.FC = () => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
         const newQty = existing.quantity + qty;
-        if (newQty > product.stock) {
-          notify(`Exceeds available stock! Available: ${formatQtyUnit(product.stock, product.base_unit)}`, "error", "Stock Limit");
-          return prev;
-        }
+        if (newQty > product.stock) { notify(`Exceeds available stock! Available: ${formatQtyUnit(product.stock, product.base_unit)}`, "error", "Stock Limit"); return prev; }
         return prev.map(item => item.product.id === product.id ? { ...item, quantity: newQty } : item);
       }
-      if (qty > product.stock) {
-        notify(`Exceeds available stock! Available: ${formatQtyUnit(product.stock, product.base_unit)}`, "error", "Stock Limit");
-        return prev;
-      }
+      if (qty > product.stock) { notify(`Exceeds available stock! Available: ${formatQtyUnit(product.stock, product.base_unit)}`, "error", "Stock Limit"); return prev; }
       return [...prev, { product, quantity: qty, discountValue: 0, discountType: 'percentage' }];
     });
   };
@@ -90,10 +64,7 @@ const SalesScreen: React.FC = () => {
   const handleQtyModalConfirm = () => {
     if (!qtyModal) return;
     const qty = parseFloat(qtyInput);
-    if (isNaN(qty) || qty <= 0) {
-      notify("Please enter a valid quantity.", "warning");
-      return;
-    }
+    if (isNaN(qty) || qty <= 0) { notify("Please enter a valid quantity.", "warning"); return; }
     addToCart(qtyModal.product, qty);
     setQtyModal(null);
   };
@@ -111,14 +82,7 @@ const SalesScreen: React.FC = () => {
   };
 
   const handleItemDiscountOpen = (item: any) => {
-    setItemDiscountModal({
-      productId: item.product.id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      discountValue: item.discountValue,
-      discountType: item.discountType
-    });
+    setItemDiscountModal({ productId: item.product.id, name: item.product.name, price: item.product.price, quantity: item.quantity, discountValue: item.discountValue, discountType: item.discountType });
     setItemDiscountInput(item.discountValue.toString());
     setItemDiscountType(item.discountType);
   };
@@ -126,447 +90,1046 @@ const SalesScreen: React.FC = () => {
   const handleItemDiscountConfirm = () => {
     if (!itemDiscountModal) return;
     const value = parseFloat(itemDiscountInput) || 0;
-    
-    // Validation: Discount cannot exceed item price
     const itemTotal = itemDiscountModal.price * itemDiscountModal.quantity;
     const discountAmt = itemDiscountType === 'percentage' ? (itemTotal * value / 100) : value;
-    
-    if (discountAmt > itemTotal) {
-      notify("Discount cannot exceed item price!", "error");
-      return;
-    }
-
-    setCart(prev => prev.map(item => 
-      item.product.id === itemDiscountModal.productId 
-        ? { ...item, discountValue: value, discountType: itemDiscountType } 
-        : item
-    ));
+    if (discountAmt > itemTotal) { notify("Discount cannot exceed item price!", "error"); return; }
+    setCart(prev => prev.map(item => item.product.id === itemDiscountModal.productId ? { ...item, discountValue: value, discountType: itemDiscountType } : item));
     setItemDiscountModal(null);
   };
 
   const cartStats = useMemo(() => {
-    let rawSubtotal = 0;
-    let totalProductDiscount = 0;
-
+    let rawSubtotal = 0, totalProductDiscount = 0;
     cart.forEach(item => {
       const itemTotal = item.product.price * item.quantity;
       rawSubtotal += itemTotal;
-      const discount = item.discountType === 'percentage' 
-        ? (itemTotal * item.discountValue / 100) 
-        : item.discountValue;
+      const discount = item.discountType === 'percentage' ? (itemTotal * item.discountValue / 100) : item.discountValue;
       totalProductDiscount += discount;
     });
-
     const subtotalAfterProductDiscounts = rawSubtotal - totalProductDiscount;
-    
-    const billDiscount = billDiscountType === 'percentage' 
-      ? (subtotalAfterProductDiscounts * billDiscountValue / 100) 
-      : billDiscountValue;
-
+    const billDiscount = billDiscountType === 'percentage' ? (subtotalAfterProductDiscounts * billDiscountValue / 100) : billDiscountValue;
     const finalTotal = Math.max(0, subtotalAfterProductDiscounts - billDiscount);
-
-    return {
-      rawSubtotal,
-      totalProductDiscount,
-      subtotalAfterProductDiscounts,
-      billDiscount,
-      finalTotal
-    };
+    return { rawSubtotal, totalProductDiscount, subtotalAfterProductDiscounts, billDiscount, finalTotal };
   }, [cart, billDiscountValue, billDiscountType]);
 
-  const change = useMemo(() => {
-    const cash = parseFloat(cashReceived) || 0;
-    return Math.max(0, cash - cartStats.finalTotal);
-  }, [cashReceived, cartStats.finalTotal]);
+  const change = useMemo(() => Math.max(0, (parseFloat(cashReceived) || 0) - cartStats.finalTotal), [cashReceived, cartStats.finalTotal]);
 
   const handleCompleteSale = async () => {
     if (cart.length === 0) return;
-    if (paymentMethod === 'Cash' && (parseFloat(cashReceived) || 0) < cartStats.finalTotal) {
-      alertCustom("Insufficient cash received!", "Payment Error", "error");
-      return;
-    }
-
+    if (paymentMethod === 'Cash' && (parseFloat(cashReceived) || 0) < cartStats.finalTotal) { alertCustom("Insufficient cash received!", "Payment Error", "error"); return; }
     setLoading(true);
     const cartSnapshot = [...cart];
     const statsSnapshot = { ...cartStats };
-
     try {
       const items: SaleItem[] = cart.map(item => {
         const itemTotal = item.product.price * item.quantity;
-        const discountAmt = item.discountType === 'percentage' 
-          ? (itemTotal * item.discountValue / 100) 
-          : item.discountValue;
-        
-        return {
-          product_id: item.product.id!,
-          quantity: item.quantity,
-          unit: item.product.base_unit,
-          price: item.product.price,
-          discount_value: item.discountValue,
-          discount_type: item.discountType,
-          discount_amount: discountAmt,
-          subtotal: itemTotal - discountAmt,
-        };
+        const discountAmt = item.discountType === 'percentage' ? (itemTotal * item.discountValue / 100) : item.discountValue;
+        return { product_id: item.product.id!, quantity: item.quantity, unit: item.product.base_unit, price: item.product.price, discount_value: item.discountValue, discount_type: item.discountType, discount_amount: discountAmt, subtotal: itemTotal - discountAmt };
       });
-      
-      const saleId = await api.completeSale(
-        cartStats.finalTotal, 
-        paymentMethod, 
-        items, 
-        billDiscountValue,
-        billDiscountType,
-        cartStats.totalProductDiscount,
-        paymentMethod === 'Cash' ? parseFloat(cashReceived) : undefined,
-        paymentMethod === 'Cash' ? change : undefined
-      );
-
+      const saleId = await api.completeSale(cartStats.finalTotal, paymentMethod, items, billDiscountValue, billDiscountType, cartStats.totalProductDiscount, paymentMethod === 'Cash' ? parseFloat(cashReceived) : undefined, paymentMethod === 'Cash' ? change : undefined);
       const history = await api.getSalesHistory();
       const latest = history[0];
-      
-      setShowReceipt({ 
-        id: saleId, 
-        invoice: latest.invoice_number, 
-        items: cartSnapshot, 
-        total: statsSnapshot.finalTotal,
-        billDiscount: statsSnapshot.billDiscount,
-        totalProductDiscount: statsSnapshot.totalProductDiscount
-      });
-      setCart([]);
-      setCashReceived('');
-      setBillDiscountValue(0);
-      setBillDiscountType('percentage');
+      setShowReceipt({ id: saleId, invoice: latest.invoice_number, items: cartSnapshot, total: statsSnapshot.finalTotal, billDiscount: statsSnapshot.billDiscount, totalProductDiscount: statsSnapshot.totalProductDiscount });
+      setCart([]); setCashReceived(''); setBillDiscountValue(0); setBillDiscountType('percentage');
       loadData();
-    } catch (error) {
-      alertCustom("Failed to complete sale: " + error, "System Error", "error");
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { alertCustom("Failed to complete sale: " + error, "System Error", "error"); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="animate-fade-in" style={{ height: 'calc(100vh - 4rem)', display: 'grid', gridTemplateColumns: '1fr 400px', gap: '2rem', overflow: 'hidden' }}>
-      {/* Left: Product Grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <div className="card" style={{ flex: 1, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Search size={20} color="var(--text-muted)" />
-            <input 
-              type="text" 
-              placeholder="Search product or scan barcode..." 
-              style={{ border: 'none', flex: 1, padding: '0.5rem', background: 'transparent' }}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                const match = products.find(p => p.barcode === e.target.value);
-                if (match) {
-                  handleProductClick(match);
-                  setSearch('');
-                }
-              }}
-              autoFocus
-            />
-          </div>
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '200px' }}>
-            <Tag size={20} color="var(--text-muted)" />
-            <select 
-              style={{ border: 'none', flex: 1, background: 'transparent' }}
-              value={selectedCategory || ''}
-              onChange={(e) => setSelectedCategory(e.target.value ? parseInt(e.target.value) : null)}
-            >
-              <option value="">All Categories</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem', overflowY: 'auto', paddingBottom: '0.75rem', flex: 1, minHeight: 0 }}>
-          {filteredProducts.map(product => (
-            <div key={product.id} className="card" style={{ padding: '0.75rem', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.1s' }} onClick={() => handleProductClick(product)}>
-              <div style={{ width: '100%', height: '80px', background: 'var(--bg-main)', borderRadius: '0.5rem', marginBottom: '0.5rem', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {product.image_url ? <img src={product.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Package size={28} opacity={0.15} />}
-              </div>
-              <div style={{ fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.name}</div>
-              <div style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '0.875rem' }}>{currency}{product.price.toFixed(2)}<span style={{ fontSize: '0.65rem', opacity: 0.6 }}>{priceUnitLabel(product.base_unit)}</span></div>
-              <div style={{ fontSize: '0.65rem', color: product.stock < 10 ? 'var(--danger)' : 'var(--text-muted)' }}>{formatQtyUnit(product.stock, product.base_unit)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right: Checkout Panel */}
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%' }}>
-        <h2 style={{ fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ShoppingCart size={20} /> Checkout
-        </h2>
+    <>
+      <style>{`
         
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          {cart.map(item => (
-            <div key={item.product.id} style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid var(--border)', gap: '0.5rem' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product.name}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  {formatQtyUnit(item.quantity, item.product.base_unit)} × {currency}{item.product.price.toFixed(2)}
-                  {item.discountValue > 0 && (
-                    <span style={{ color: 'var(--danger)', marginLeft: '0.5rem' }}>
-                      (Disc: -{item.discountType === 'percentage' ? `${item.discountValue}%` : `${currency}${item.discountValue}`})
-                    </span>
-                  )}
+
+        .sales-root {
+          font-family: 'Nunito', sans-serif;
+          height: 100%;
+          display: grid;
+          grid-template-columns: 1fr 380px;
+          gap: 1.25rem;
+          overflow: hidden;
+          animation: fadeIn 0.25s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Left panel ── */
+        .sales-left {
+          display: flex;
+          flex-direction: column;
+          gap: 0.875rem;
+          overflow: hidden;
+        }
+
+        .sales-search-row {
+          display: flex;
+          gap: 0.75rem;
+        }
+
+        .search-box {
+          flex: 1;
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.75rem;
+          padding: 0.7rem 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+        }
+
+        .search-input {
+          border: none;
+          flex: 1;
+          background: transparent;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.9rem;
+          color: #1a3528;
+          outline: none;
+        }
+
+        .search-input::placeholder { color: #b0a898; }
+
+        .cat-box {
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.75rem;
+          padding: 0.7rem 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          min-width: 180px;
+        }
+
+        .cat-select {
+          border: none;
+          background: transparent;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.875rem;
+          color: #1a3528;
+          outline: none;
+          flex: 1;
+          cursor: pointer;
+        }
+
+        /* Product grid */
+        .product-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+          align-content: start;
+          gap: 0.75rem;
+          overflow-y: auto;
+          padding-bottom: 0.5rem;
+          flex: 1;
+          min-height: 0;
+        }
+
+        .product-card {
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.875rem;
+          padding: 0.75rem;
+          cursor: pointer;
+          text-align: center;
+          transition: border-color 0.12s, transform 0.1s, box-shadow 0.12s;
+        }
+
+        .product-card:hover {
+          border-color: #2d5a3d;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(45,90,61,0.1);
+        }
+
+        .product-img {
+          width: 100%;
+          height: 76px;
+          background: #edeae0;
+          border-radius: 0.5rem;
+          margin-bottom: 0.5rem;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #b0a898;
+        }
+
+        .product-name {
+          font-weight: 700;
+          font-size: 0.8rem;
+          color: #1a3528;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-bottom: 0.15rem;
+        }
+
+        .product-price {
+          color: #2d5a3d;
+          font-weight: 800;
+          font-size: 0.875rem;
+        }
+
+        .product-stock {
+          font-size: 0.65rem;
+          color: #7a9e8a;
+          margin-top: 0.1rem;
+        }
+
+        .product-stock-low { color: #c05050; }
+
+        /* ── Right: Checkout panel ── */
+        .checkout-panel {
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          height: 100%;
+          overflow: hidden;
+        }
+
+        .checkout-header {
+          padding: 1.1rem 1.25rem;
+          border-bottom: 1.5px solid #ddd8cc;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 1rem;
+          font-weight: 800;
+          color: #1a3528;
+        }
+
+        /* Cart items */
+        .cart-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0.5rem 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+        }
+
+        .cart-item {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.55rem 0;
+          border-bottom: 1px solid #e8e4d8;
+        }
+
+        .cart-item-info { flex: 1; min-width: 0; }
+
+        .cart-item-name {
+          font-weight: 600;
+          font-size: 0.8rem;
+          color: #1a3528;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .cart-item-meta {
+          font-size: 0.68rem;
+          color: #7a9e8a;
+          margin-top: 0.1rem;
+        }
+
+        .cart-item-disc { color: #c05050; }
+
+        .cart-item-total {
+          font-weight: 700;
+          font-size: 0.85rem;
+          color: #1a3528;
+          min-width: 56px;
+          text-align: right;
+        }
+
+        .cart-item-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.2rem;
+        }
+
+        .ci-btn {
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #edeae0;
+          border: 1px solid #ddd8cc;
+          border-radius: 0.35rem;
+          cursor: pointer;
+          color: #5a7a6a;
+          transition: background 0.1s;
+          padding: 0;
+        }
+
+        .ci-btn:hover { background: #ddd8cc; color: #1a3528; }
+
+        .ci-btn-disc { color: #7a9e8a; }
+        .ci-btn-disc.active { color: #c05050; border-color: #e8c0c0; background: #fdf0f0; }
+
+        .ci-btn-del {
+          background: transparent;
+          border: none;
+          color: #c8a0a0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          padding: 2px;
+          border-radius: 0.35rem;
+          transition: color 0.1s;
+        }
+
+        .ci-btn-del:hover { color: #c05050; }
+
+        .cart-empty {
+          text-align: center;
+          color: #b0a898;
+          margin-top: 2.5rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+        }
+
+        /* Totals */
+        .totals-box {
+          background: #edeae0;
+          border-top: 1.5px solid #ddd8cc;
+          padding: 0.875rem 1.25rem;
+        }
+
+        .totals-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 0.82rem;
+          color: #5a7a6a;
+          margin-bottom: 0.25rem;
+          font-weight: 600;
+        }
+
+        .totals-row-danger { color: #c05050; }
+
+        .totals-row-total {
+          font-size: 1.2rem;
+          font-weight: 800;
+          color: #1a3528;
+          margin-top: 0.5rem;
+          padding-top: 0.5rem;
+          border-top: 1.5px solid #ddd8cc;
+        }
+
+        /* Bill discount */
+        .bill-disc-section {
+          padding: 0.75rem 1.25rem;
+          border-top: 1.5px solid #ddd8cc;
+        }
+
+        .bill-disc-label {
+          font-size: 0.68rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: #7a9e8a;
+          margin-bottom: 0.4rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .disc-type-toggle {
+          display: flex;
+          gap: 0.2rem;
+        }
+
+        .disc-type-btn {
+          font-size: 0.65rem;
+          padding: 2px 8px;
+          border-radius: 0.3rem;
+          border: 1px solid #ddd8cc;
+          background: #f5f0e8;
+          color: #7a9e8a;
+          cursor: pointer;
+          font-family: 'Nunito', sans-serif;
+          font-weight: 700;
+          transition: all 0.1s;
+        }
+
+        .disc-type-btn.active {
+          background: #2d5a3d;
+          color: #e8f4ec;
+          border-color: #2d5a3d;
+        }
+
+        .bill-disc-input-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .bill-disc-input {
+          flex: 1;
+          padding: 0.45rem 0.65rem;
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          font-family: 'Nunito', sans-serif;
+          color: #1a3528;
+          outline: none;
+        }
+
+        .bill-disc-input:focus { border-color: #2d5a3d; }
+
+        .bill-disc-amt {
+          color: #c05050;
+          font-weight: 700;
+          font-size: 0.8rem;
+          min-width: 60px;
+          text-align: right;
+        }
+
+        /* Payment */
+        .payment-section {
+          padding: 0.75rem 1.25rem;
+          border-top: 1.5px solid #ddd8cc;
+        }
+
+        .pay-label {
+          font-size: 0.68rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: #7a9e8a;
+          margin-bottom: 0.5rem;
+        }
+
+        .pay-methods {
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .pay-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.4rem;
+          padding: 0.55rem;
+          border-radius: 0.625rem;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.82rem;
+          font-weight: 700;
+          cursor: pointer;
+          border: 1.5px solid #ddd8cc;
+          background: #edeae0;
+          color: #5a7a6a;
+          transition: all 0.12s;
+        }
+
+        .pay-btn.active {
+          background: #2d5a3d;
+          color: #e8f4ec;
+          border-color: #2d5a3d;
+        }
+
+        .cash-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.75rem;
+        }
+
+        .cash-label {
+          font-size: 0.7rem;
+          color: #7a9e8a;
+          font-weight: 600;
+          margin-bottom: 0.25rem;
+        }
+
+        .cash-input {
+          width: 100%;
+          padding: 0.45rem 0.65rem;
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.5rem;
+          font-size: 1rem;
+          font-family: 'Nunito', sans-serif;
+          font-weight: 700;
+          color: #1a3528;
+          outline: none;
+          box-sizing: border-box;
+        }
+
+        .cash-input:focus { border-color: #2d5a3d; }
+
+        .change-val {
+          font-size: 1.2rem;
+          font-weight: 800;
+          color: #2d5a3d;
+        }
+
+        /* Action buttons */
+        .action-row {
+          display: flex;
+          gap: 0.5rem;
+          padding: 0.875rem 1.25rem;
+          border-top: 1.5px solid #ddd8cc;
+        }
+
+        .btn-clear {
+          flex: 1;
+          padding: 0.75rem;
+          background: transparent;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.75rem;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #7a9e8a;
+          cursor: pointer;
+          transition: all 0.12s;
+        }
+
+        .btn-clear:hover { background: #edeae0; color: #1a3528; }
+
+        .btn-complete {
+          flex: 2;
+          padding: 0.75rem;
+          background: #2d5a3d;
+          border: none;
+          border-radius: 0.75rem;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #e8f4ec;
+          cursor: pointer;
+          transition: background 0.12s, transform 0.1s;
+          box-shadow: 0 3px 12px rgba(45,90,61,0.25);
+        }
+
+        .btn-complete:hover:not(:disabled) { background: #245033; transform: translateY(-1px); }
+        .btn-complete:disabled { background: #7a9e8a; cursor: not-allowed; box-shadow: none; }
+
+        /* ── Modals ── */
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(26,53,40,0.45);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 100;
+          padding: 1.5rem;
+          backdrop-filter: blur(2px);
+        }
+
+        .modal-card {
+          background: #f5f0e8;
+          border-radius: 1.5rem;
+          padding: 2rem;
+          width: 100%;
+          max-width: 400px;
+          box-shadow: 0 24px 48px rgba(0,0,0,0.2);
+          border: 1.5px solid #ddd8cc;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+          font-size: 1.2rem;
+          font-weight: 800;
+          color: #1a3528;
+          margin: 0 0 0.2rem;
+        }
+
+        .modal-sub {
+          font-size: 0.82rem;
+          color: #7a9e8a;
+          margin: 0;
+          font-weight: 500;
+        }
+
+        .modal-close-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: #edeae0;
+          border: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #7a9e8a;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: background 0.12s;
+        }
+
+        .modal-close-btn:hover { background: #ddd8cc; color: #1a3528; }
+
+        .modal-info-box {
+          background: #edeae0;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.875rem;
+          padding: 1rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .modal-info-label {
+          font-size: 0.65rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: #7a9e8a;
+          margin-bottom: 0.5rem;
+        }
+
+        .modal-info-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.85rem;
+          color: #5a7a6a;
+          margin-bottom: 0.2rem;
+          font-weight: 600;
+        }
+
+        .modal-info-val { color: #1a3528; font-weight: 700; }
+
+        .modal-label {
+          font-size: 0.72rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: #7a9e8a;
+          display: block;
+          margin-bottom: 0.4rem;
+        }
+
+        .modal-input {
+          width: 100%;
+          padding: 0.75rem;
+          background: #edeae0;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.75rem;
+          font-size: 1.5rem;
+          text-align: center;
+          font-weight: 800;
+          font-family: 'Nunito', sans-serif;
+          color: #1a3528;
+          outline: none;
+          box-sizing: border-box;
+          margin-bottom: 1.25rem;
+        }
+
+        .modal-input:focus { border-color: #2d5a3d; }
+
+        .modal-subtotal-preview {
+          background: #e6ede8;
+          border: 1.5px solid #c8ddd0;
+          border-radius: 0.875rem;
+          padding: 1rem;
+          text-align: center;
+          margin-bottom: 1.25rem;
+        }
+
+        .modal-subtotal-label {
+          font-size: 0.65rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: #2d5a3d;
+          margin-bottom: 0.2rem;
+        }
+
+        .modal-subtotal-val {
+          font-size: 1.75rem;
+          font-weight: 800;
+          color: #1a3528;
+          letter-spacing: -0.02em;
+        }
+
+        .modal-type-row {
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .modal-type-btn {
+          flex: 1;
+          padding: 0.65rem;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.625rem;
+          background: #edeae0;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.82rem;
+          font-weight: 700;
+          color: #5a7a6a;
+          cursor: pointer;
+          transition: all 0.12s;
+        }
+
+        .modal-type-btn.active {
+          background: #2d5a3d;
+          color: #e8f4ec;
+          border-color: #2d5a3d;
+        }
+
+        .modal-actions {
+          display: flex;
+          gap: 0.75rem;
+        }
+
+        .modal-btn-cancel {
+          flex: 1;
+          padding: 0.75rem;
+          background: transparent;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 0.75rem;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.9rem;
+          font-weight: 700;
+          color: #7a9e8a;
+          cursor: pointer;
+          transition: background 0.12s;
+        }
+
+        .modal-btn-cancel:hover { background: #edeae0; }
+
+        .modal-btn-confirm {
+          flex: 1;
+          padding: 0.75rem;
+          background: #2d5a3d;
+          border: none;
+          border-radius: 0.75rem;
+          font-family: 'Nunito', sans-serif;
+          font-size: 0.9rem;
+          font-weight: 800;
+          color: #e8f4ec;
+          cursor: pointer;
+          transition: background 0.12s;
+          box-shadow: 0 3px 10px rgba(45,90,61,0.25);
+        }
+
+        .modal-btn-confirm:hover { background: #245033; }
+
+        /* Receipt */
+        .receipt-dashed {
+          border-top: 2px dashed #ddd8cc;
+          border-bottom: 2px dashed #ddd8cc;
+          padding: 1rem 0;
+          margin-bottom: 1.25rem;
+        }
+
+        .receipt-item-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.85rem;
+          color: #1a3528;
+          font-weight: 500;
+          margin-bottom: 0.25rem;
+        }
+
+        .receipt-disc-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.72rem;
+          color: #c05050;
+          font-style: italic;
+          margin-bottom: 0.4rem;
+        }
+
+        .receipt-total-row {
+          display: flex;
+          justify-content: space-between;
+          font-weight: 800;
+          font-size: 1.05rem;
+          color: #1a3528;
+          margin-top: 0.5rem;
+          padding-top: 0.5rem;
+          border-top: 1px solid #ddd8cc;
+        }
+
+        .receipt-logo-circle {
+          width: 48px;
+          height: 48px;
+          background: #2d5a3d;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 1rem;
+        }
+
+        .badge-green {
+          display: inline-block;
+          background: #e6ede8;
+          color: #2d5a3d;
+          border-radius: 0.35rem;
+          padding: 1px 6px;
+          font-size: 0.72rem;
+          font-weight: 700;
+        }
+      `}</style>
+
+      <div className="sales-root">
+        {/* ── Left: Product Grid ── */}
+        <div className="sales-left">
+          <div className="sales-search-row">
+            <div className="search-box">
+              <Search size={18} color="#7a9e8a" />
+              <input
+                type="text"
+                className="search-input"
+                placeholder={t('search_product_barcode')}
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  const match = products.find(p => p.barcode === e.target.value);
+                  if (match) { handleProductClick(match); setSearch(''); }
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="cat-box">
+              <Tag size={16} color="#7a9e8a" />
+              <select
+                className="cat-select"
+                value={selectedCategory || ''}
+                onChange={(e) => setSelectedCategory(e.target.value ? parseInt(e.target.value) : null)}
+              >
+                <option value="">{t('all_categories')}</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="product-grid">
+            {filteredProducts.map(product => (
+              <div key={product.id} className="product-card" onClick={() => handleProductClick(product)}>
+                <div className="product-img">
+                  {product.image_url
+                    ? <img src={product.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <Package size={26} />}
+                </div>
+                <div className="product-name">{product.name}</div>
+                <div className="product-price">
+                  {currency}{product.price.toFixed(2)}
+                  <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>{priceUnitLabel(product.base_unit)}</span>
+                </div>
+                <div className={`product-stock ${product.stock < 10 ? 'product-stock-low' : ''}`}>
+                  {formatQtyUnit(product.stock, product.base_unit)}
                 </div>
               </div>
-              <div style={{ fontWeight: 600, fontSize: '0.875rem', minWidth: '60px', textAlign: 'right' }}>
-                {currency}{(item.product.price * item.quantity - (item.discountType === 'percentage' ? (item.product.price * item.quantity * item.discountValue / 100) : item.discountValue)).toFixed(2)}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <button onClick={() => updateQuantity(item.product.id!, -1)} className="btn-outline" style={{ padding: '2px', width: '24px', height: '24px' }}><Minus size={12}/></button>
-                <button onClick={() => updateQuantity(item.product.id!, 1)} className="btn-outline" style={{ padding: '2px', width: '24px', height: '24px' }}><Plus size={12}/></button>
-                <button onClick={() => handleItemDiscountOpen(item)} title="Discount" className="btn-outline" style={{ padding: '2px', width: '24px', height: '24px', color: item.discountValue > 0 ? 'var(--danger)' : 'var(--text-muted)' }}><Tag size={12}/></button>
-                <button onClick={() => setCart(c => c.filter(i => i.product.id !== item.product.id))} style={{ color: 'var(--danger)', background: 'transparent', padding: '2px' }}><Trash2 size={14}/></button>
-              </div>
-            </div>
-          ))}
-          {cart.length === 0 && <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '2rem', fontSize: '0.875rem' }}>Scan or search products to begin</div>}
-        </div>
-
-        <div style={{ background: 'var(--bg-main)', padding: '1rem', borderRadius: '0.5rem' }}>
-          <div className="flex-between" style={{ fontSize: '0.875rem', marginBottom: '0.25rem' }}><span>Items Total</span><span>{currency}{cartStats.rawSubtotal.toFixed(2)}</span></div>
-          {cartStats.totalProductDiscount > 0 && (
-            <div className="flex-between" style={{ fontSize: '0.875rem', marginBottom: '0.25rem', color: 'var(--danger)' }}>
-              <span>Product Discounts</span><span>-{currency}{cartStats.totalProductDiscount.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="flex-between" style={{ fontSize: '0.875rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-            <span>Subtotal</span><span>{currency}{cartStats.subtotalAfterProductDiscounts.toFixed(2)}</span>
-          </div>
-          
-          <div style={{ marginBottom: '0.75rem' }}>
-            <div className="flex-between" style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-              <span>BILL DISCOUNT</span>
-              <div style={{ display: 'flex', gap: '0.25rem' }}>
-                <button onClick={() => setBillDiscountType('percentage')} style={{ fontSize: '0.65rem', padding: '2px 6px', background: billDiscountType === 'percentage' ? 'var(--primary)' : 'white', color: billDiscountType === 'percentage' ? 'white' : 'var(--text-muted)', borderRadius: '4px' }}>%</button>
-                <button onClick={() => setBillDiscountType('fixed')} style={{ fontSize: '0.65rem', padding: '2px 6px', background: billDiscountType === 'fixed' ? 'var(--primary)' : 'white', color: billDiscountType === 'fixed' ? 'white' : 'var(--text-muted)', borderRadius: '4px' }}>{currency}</button>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <input 
-                type="number" 
-                value={billDiscountValue || ''} 
-                onChange={(e) => setBillDiscountValue(parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                style={{ flex: 1, padding: '0.35rem', fontSize: '0.875rem' }}
-              />
-              {cartStats.billDiscount > 0 && <span style={{ color: 'var(--danger)', fontWeight: 600, minWidth: '60px', textAlign: 'right' }}>-{currency}{cartStats.billDiscount.toFixed(2)}</span>}
-            </div>
-          </div>
-
-          <div className="flex-between" style={{ fontWeight: 800, fontSize: '1.25rem', color: 'var(--primary)', marginTop: '0.5rem', borderTop: '2px solid var(--border)', paddingTop: '0.5rem' }}>
-            <span>Total</span><span>{currency}{cartStats.finalTotal.toFixed(2)}</span>
+            ))}
           </div>
         </div>
 
-        <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, display: 'block', marginBottom: '0.5rem' }}>PAYMENT METHOD</label>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button className={`btn ${paymentMethod === 'Cash' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }} onClick={() => setPaymentMethod('Cash')}><Banknote size={16} /> Cash</button>
-            <button className={`btn ${paymentMethod === 'Card' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }} onClick={() => setPaymentMethod('Card')}><CreditCard size={16} /> Card</button>
+        {/* ── Right: Checkout Panel ── */}
+        <div className="checkout-panel">
+          <div className="checkout-header">
+            <ShoppingCart size={18} color="#2d5a3d" />
+            {t('checkout')}
           </div>
-          
-          {paymentMethod === 'Cash' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cash Received</label>
-                <input type="number" style={{ width: '100%', fontSize: '1.125rem' }} value={cashReceived} onChange={e => setCashReceived(e.target.value)} placeholder="0.00" />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Change</label>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--success)' }}>{currency}{change.toFixed(2)}</div>
-              </div>
-            </div>
-          )}
-        </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => { setCart([]); setCashReceived(''); }}>Clear</button>
-          <button 
-            className="btn btn-primary" 
-            style={{ flex: 2, padding: '1rem' }} 
-            disabled={cart.length === 0 || loading} 
-            onClick={handleCompleteSale}
-          >
-            {loading ? 'Processing...' : 'Complete Sale'}
-          </button>
-        </div>
-      </div>
+          {/* Cart list */}
+          <div className="cart-list">
+            {cart.length === 0 && <div className="cart-empty">{t('scan_to_begin')}</div>}
+            {cart.map(item => (
+              <div key={item.product.id} className="cart-item">
+                <div className="cart-item-info">
+                  <div className="cart-item-name">{item.product.name}</div>
+                  <div className="cart-item-meta">
+                    {formatQtyUnit(item.quantity, item.product.base_unit)} × {currency}{item.product.price.toFixed(2)}
+                    {item.discountValue > 0 && (
+                      <span className="cart-item-disc"> · -{item.discountType === 'percentage' ? `${item.discountValue}%` : `${currency}${item.discountValue}`}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="cart-item-total">
+                  {currency}{(item.product.price * item.quantity - (item.discountType === 'percentage' ? (item.product.price * item.quantity * item.discountValue / 100) : item.discountValue)).toFixed(2)}
+                </div>
+                <div className="cart-item-actions">
+                  <button className="ci-btn" onClick={() => updateQuantity(item.product.id!, -1)}><Minus size={11} /></button>
+                  <button className="ci-btn" onClick={() => updateQuantity(item.product.id!, 1)}><Plus size={11} /></button>
+                  <button className={`ci-btn ci-btn-disc ${item.discountValue > 0 ? 'active' : ''}`} onClick={() => handleItemDiscountOpen(item)} title="Discount"><Tag size={11} /></button>
+                  <button className="ci-btn-del" onClick={() => setCart(c => c.filter(i => i.product.id !== item.product.id))}><Trash2 size={13} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
 
-      {/* Quantity Input Modal (for weight/volume products) */}
-      {qtyModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-              <div style={{ textAlign: 'left' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Enter Quantity</h3>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{qtyModal.product.name}</p>
-              </div>
-              <button 
-                onClick={() => setQtyModal(null)} 
-                style={{ background: 'var(--bg-main)', width: '32px', height: '32px', borderRadius: '50%', color: 'var(--text-muted)' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            
-            <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '1rem', border: '1px solid var(--border)', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: '0.5rem' }}>
-                Quick Info
-              </div>
-              <div className="flex-between" style={{ fontSize: '0.875rem', marginBottom: '0.25rem' }}>
-                <span>Price:</span>
-                <span style={{ fontWeight: 700 }}>{currency}{qtyModal.product.price.toFixed(2)}{priceUnitLabel(qtyModal.product.base_unit)}</span>
-              </div>
-              <div className="flex-between" style={{ fontSize: '0.875rem' }}>
-                <span>Stock:</span>
-                <span className="badge badge-primary">{formatQtyUnit(qtyModal.product.stock, qtyModal.product.base_unit)}</span>
+          {/* Bill Discount */}
+          <div className="bill-disc-section">
+            <div className="bill-disc-label">
+              <span>{t('bill_discount')}</span>
+              <div className="disc-type-toggle">
+                <button className={`disc-type-btn ${billDiscountType === 'percentage' ? 'active' : ''}`} onClick={() => setBillDiscountType('percentage')}>%</button>
+                <button className={`disc-type-btn ${billDiscountType === 'fixed' ? 'active' : ''}`} onClick={() => setBillDiscountType('fixed')}>{currency}</button>
               </div>
             </div>
-            
-            <div className="grid-form" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label" style={{ textAlign: 'left' }}>Quantity ({qtyModal.product.base_unit})</label>
-              <input 
-                type="number" 
-                step="0.001" 
-                autoFocus
-                className="w-full"
-                style={{ fontSize: '1.5rem', textAlign: 'center', fontWeight: 700 }} 
-                value={qtyInput} 
-                onChange={e => setQtyInput(e.target.value)} 
-                placeholder={`0.000`}
-                onKeyDown={e => e.key === 'Enter' && handleQtyModalConfirm()}
-              />
+            <div className="bill-disc-input-row">
+              <input className="bill-disc-input" type="number" value={billDiscountValue || ''} onChange={(e) => setBillDiscountValue(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+              {cartStats.billDiscount > 0 && <span className="bill-disc-amt">-{currency}{cartStats.billDiscount.toFixed(2)}</span>}
             </div>
+          </div>
 
-            {qtyInput && parseFloat(qtyInput) > 0 && (
-              <div style={{ background: 'rgba(79, 70, 229, 0.05)', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.5rem', border: '1px solid rgba(79, 70, 229, 0.1)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700, marginBottom: '0.125rem' }}>TOTAL SUB-TOTAL</div>
-                <div style={{ fontWeight: 800, fontSize: '1.75rem', color: 'var(--primary)', letterSpacing: '-0.025em' }}>
-                  {currency}{(parseFloat(qtyInput) * qtyModal.product.price).toFixed(2)}
+          {/* Totals */}
+          <div className="totals-box">
+            <div className="totals-row"><span>{t('items_total')}</span><span>{currency}{cartStats.rawSubtotal.toFixed(2)}</span></div>
+            {cartStats.totalProductDiscount > 0 && (
+              <div className="totals-row totals-row-danger"><span>{t('product_discounts')}</span><span>-{currency}{cartStats.totalProductDiscount.toFixed(2)}</span></div>
+            )}
+            <div className="totals-row"><span>{t('subtotal')}</span><span>{currency}{cartStats.subtotalAfterProductDiscounts.toFixed(2)}</span></div>
+            <div className="totals-row totals-row-total"><span>{t('total')}</span><span>{currency}{cartStats.finalTotal.toFixed(2)}</span></div>
+          </div>
+
+          {/* Payment */}
+          <div className="payment-section">
+            <div className="pay-label">{t('payment_method')}</div>
+            <div className="pay-methods">
+              <button className={`pay-btn ${paymentMethod === 'Cash' ? 'active' : ''}`} onClick={() => setPaymentMethod('Cash')}><Banknote size={15} /> {t('cash')}</button>
+              <button className={`pay-btn ${paymentMethod === 'Card' ? 'active' : ''}`} onClick={() => setPaymentMethod('Card')}><CreditCard size={15} /> {t('card')}</button>
+            </div>
+            {paymentMethod === 'Cash' && (
+              <div className="cash-row">
+                <div>
+                  <div className="cash-label">{t('cash_received')}</div>
+                  <input className="cash-input" type="number" value={cashReceived} onChange={e => setCashReceived(e.target.value)} placeholder="0.00" />
+                </div>
+                <div>
+                  <div className="cash-label">{t('change_amount')}</div>
+                  <div className="change-val">{currency}{change.toFixed(2)}</div>
                 </div>
               </div>
             )}
+          </div>
 
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn btn-outline" style={{ flex: 1, padding: '0.75rem' }} onClick={() => setQtyModal(null)}>Cancel</button>
-              <button className="btn btn-primary" style={{ flex: 1, padding: '0.75rem' }} onClick={handleQtyModalConfirm}>Add to Cart</button>
-            </div>
+          {/* Actions */}
+          <div className="action-row">
+            <button className="btn-clear" onClick={() => { setCart([]); setCashReceived(''); }}>{t('clear')}</button>
+            <button className="btn-complete" disabled={cart.length === 0 || loading} onClick={handleCompleteSale}>
+              {loading ? t('processing') : t('complete_sale')}
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Item Discount Modal */}
-      {itemDiscountModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px' }}>
-            <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-              <div style={{ textAlign: 'left' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Item Discount</h3>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{itemDiscountModal.name}</p>
+        {/* ── Qty Modal ── */}
+        {qtyModal && (
+          <div className="modal-overlay">
+            <div className="modal-card">
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">{t('enter_quantity')}</h3>
+                  <p className="modal-sub">{qtyModal.product.name}</p>
+                </div>
+                <button className="modal-close-btn" onClick={() => setQtyModal(null)}><X size={16} /></button>
               </div>
-              <button onClick={() => setItemDiscountModal(null)} style={{ background: 'var(--bg-main)', width: '32px', height: '32px', borderRadius: '50%', color: 'var(--text-muted)' }}><X size={18} /></button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-              <button onClick={() => setItemDiscountType('percentage')} className={`btn ${itemDiscountType === 'percentage' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>Percentage (%)</button>
-              <button onClick={() => setItemDiscountType('fixed')} className={`btn ${itemDiscountType === 'fixed' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>Fixed Amount ({currency})</button>
-            </div>
-
-            <div className="grid-form" style={{ marginBottom: '1.5rem' }}>
-              <label className="form-label">Discount Value</label>
-              <input 
-                type="number" 
-                autoFocus
-                className="w-full"
-                style={{ fontSize: '1.5rem', textAlign: 'center', fontWeight: 700 }} 
-                value={itemDiscountInput} 
-                onChange={e => setItemDiscountInput(e.target.value)} 
-                placeholder="0.00"
-                onKeyDown={e => e.key === 'Enter' && handleItemDiscountConfirm()}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn btn-outline" style={{ flex: 1, padding: '0.75rem' }} onClick={() => setItemDiscountModal(null)}>Cancel</button>
-              <button className="btn btn-primary" style={{ flex: 1, padding: '0.75rem' }} onClick={handleItemDiscountConfirm}>Apply Discount</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Receipt Modal */}
-      {showReceipt && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px', padding: '2rem' }}>
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Logo" style={{ maxWidth: '100px', marginBottom: '1rem' }} />
-              ) : (
-                <div style={{ width: '48px', height: '48px', background: 'var(--success)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
-                  <ShoppingCart size={24} />
+              <div className="modal-info-box">
+                <div className="modal-info-label">{t('quick_info')}</div>
+                <div className="modal-info-row"><span>{t('price')}</span><span className="modal-info-val">{currency}{qtyModal.product.price.toFixed(2)}{priceUnitLabel(qtyModal.product.base_unit)}</span></div>
+                <div className="modal-info-row"><span>{t('stock')}</span><span className="badge-green">{formatQtyUnit(qtyModal.product.stock, qtyModal.product.base_unit)}</span></div>
+              </div>
+              <label className="modal-label">{t('quantity')} ({t(qtyModal.product.base_unit)})</label>
+              <input className="modal-input" type="number" step="0.001" autoFocus value={qtyInput} onChange={e => setQtyInput(e.target.value)} placeholder="0.000" onKeyDown={e => e.key === 'Enter' && handleQtyModalConfirm()} />
+              {qtyInput && parseFloat(qtyInput) > 0 && (
+                <div className="modal-subtotal-preview">
+                  <div className="modal-subtotal-label">{t('subtotal')}</div>
+                  <div className="modal-subtotal-val">{currency}{(parseFloat(qtyInput) * qtyModal.product.price).toFixed(2)}</div>
                 </div>
               )}
-              
-              <h2 style={{ fontSize: `${settings?.font_size_header || 24}px`, fontWeight: 800, margin: 0 }}>{settings?.shop_name}</h2>
-              <p style={{ fontSize: `${settings?.font_size_body || 14}px`, color: 'var(--text-muted)', marginTop: '0.25rem' }}>{settings?.receipt_text}</p>
-              <div style={{ fontSize: '10px', color: '#999', marginTop: '0.5rem' }}>Invoice: {showReceipt.invoice}</div>
-            </div>
-
-            <div style={{ borderTop: '2px dashed var(--border)', borderBottom: '2px dashed var(--border)', padding: '1rem 0', marginBottom: '1.5rem' }}>
-              {showReceipt.items.map((item, idx) => {
-                const itemTotal = item.product.price * item.quantity;
-                const disc = item.discountType === 'percentage' ? (itemTotal * item.discountValue / 100) : item.discountValue;
-                return (
-                  <div key={idx} style={{ marginBottom: '0.6rem' }}>
-                    <div className="flex-between" style={{ fontSize: `${settings?.font_size_body || 14}px` }}>
-                      <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.product.name} × {formatQtyUnit(item.quantity, item.product.base_unit)}</span>
-                      <span style={{ fontWeight: 600 }}>{currency}{itemTotal.toFixed(2)}</span>
-                    </div>
-                    {disc > 0 && (
-                      <div className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--danger)', fontStyle: 'italic' }}>
-                        <span>- Discount ({item.discountType === 'percentage' ? `${item.discountValue}%` : 'Fixed'})</span>
-                        <span>-{currency}{disc.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              
-              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)', marginTop: '0.5rem' }}>
-                <div className="flex-between" style={{ fontSize: `${settings?.font_size_body || 14}px`, marginBottom: '0.25rem' }}>
-                  <span>Subtotal</span><span>{currency}{(showReceipt.total + showReceipt.billDiscount).toFixed(2)}</span>
-                </div>
-                {showReceipt.billDiscount > 0 && (
-                  <div className="flex-between" style={{ fontSize: `${settings?.font_size_body || 14}px`, marginBottom: '0.25rem', color: 'var(--danger)' }}>
-                    <span>Bill Discount</span><span>-{currency}{showReceipt.billDiscount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex-between" style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-main)', marginTop: '0.5rem' }}>
-                  <span>TOTAL</span><span>{currency}{showReceipt.total.toFixed(2)}</span>
-                </div>
+              <div className="modal-actions">
+                <button className="modal-btn-cancel" onClick={() => setQtyModal(null)}>{t('cancel')}</button>
+                <button className="modal-btn-confirm" onClick={handleQtyModalConfirm}>{t('add_to_cart')}</button>
               </div>
             </div>
-            
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-               <p style={{ fontSize: `${settings?.font_size_footer || 12}px`, color: 'var(--text-muted)', marginBottom: '0.5rem', fontStyle: 'italic' }}>
-                 {settings?.footer_text || 'Thank you!'}
-               </p>
-               <div style={{ fontSize: '10px', color: '#999' }}>{new Date().toLocaleString()}</div>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '1rem' }} className="no-print">
-              <button className="btn btn-outline" style={{ flex: 1, padding: '0.75rem' }} onClick={() => setShowReceipt(null)}><X size={16} /> Close</button>
-              <button className="btn btn-primary" style={{ flex: 1, padding: '0.75rem' }} onClick={() => window.print()}><Printer size={16} /> Print</button>
+          </div>
+        )}
+
+        {/* ── Item Discount Modal ── */}
+        {itemDiscountModal && (
+          <div className="modal-overlay">
+            <div className="modal-card">
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">{t('item_discount')}</h3>
+                  <p className="modal-sub">{itemDiscountModal.name}</p>
+                </div>
+                <button className="modal-close-btn" onClick={() => setItemDiscountModal(null)}><X size={16} /></button>
+              </div>
+              <div className="modal-type-row">
+                <button className={`modal-type-btn ${itemDiscountType === 'percentage' ? 'active' : ''}`} onClick={() => setItemDiscountType('percentage')}>{t('percentage')}</button>
+                <button className={`modal-type-btn ${itemDiscountType === 'fixed' ? 'active' : ''}`} onClick={() => setItemDiscountType('fixed')}>{t('fixed_amount')} ({currency})</button>
+              </div>
+              <label className="modal-label">{t('discount_value')}</label>
+              <input className="modal-input" type="number" autoFocus value={itemDiscountInput} onChange={e => setItemDiscountInput(e.target.value)} placeholder="0.00" onKeyDown={e => e.key === 'Enter' && handleItemDiscountConfirm()} />
+              <div className="modal-actions">
+                <button className="modal-btn-cancel" onClick={() => setItemDiscountModal(null)}>{t('cancel')}</button>
+                <button className="modal-btn-confirm" onClick={handleItemDiscountConfirm}>{t('apply_discount')}</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {/* ── Receipt Modal ── */}
+        {showReceipt && (
+          <div className="modal-overlay">
+            <div className="modal-card" style={{ maxWidth: '420px', padding: '2rem' }}>
+              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                {settings?.logo_url
+                  ? <img src={settings.logo_url} alt="Logo" style={{ maxWidth: '90px', marginBottom: '1rem' }} />
+                  : <div className="receipt-logo-circle"><ShoppingCart size={22} color="#a8d4b8" /></div>}
+                <h2 style={{ fontSize: `${settings?.font_size_header || 22}px`, fontWeight: 800, color: '#1a3528', margin: '0 0 0.2rem' }}>{settings?.shop_name}</h2>
+                <p style={{ fontSize: `${settings?.font_size_body || 13}px`, color: '#7a9e8a', margin: 0 }}>{settings?.receipt_text}</p>
+                <div style={{ fontSize: '0.7rem', color: '#b0a898', marginTop: '0.4rem' }}>{t('invoice')} {showReceipt.invoice}</div>
+              </div>
+              <div className="receipt-dashed">
+                {showReceipt.items.map((item, idx) => {
+                  const itemTotal = item.product.price * item.quantity;
+                  const disc = item.discountType === 'percentage' ? (itemTotal * item.discountValue / 100) : item.discountValue;
+                  return (
+                    <div key={idx} style={{ marginBottom: '0.5rem' }}>
+                      <div className="receipt-item-row">
+                        <span>{item.product.name} × {formatQtyUnit(item.quantity, item.product.base_unit)}</span>
+                        <span>{currency}{itemTotal.toFixed(2)}</span>
+                      </div>
+                      {disc > 0 && (
+                        <div className="receipt-disc-row">
+                          <span>{t('discount')} ({item.discountType === 'percentage' ? `${item.discountValue}%` : t('fixed_amount')})</span>
+                          <span>-{currency}{disc.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #ddd8cc', marginTop: '0.4rem' }}>
+                  <div className="receipt-item-row" style={{ fontSize: '0.8rem', color: '#7a9e8a' }}><span>{t('subtotal')}</span><span>{currency}{(showReceipt.total + showReceipt.billDiscount).toFixed(2)}</span></div>
+                  {showReceipt.billDiscount > 0 && (
+                    <div className="receipt-item-row" style={{ fontSize: '0.8rem', color: '#c05050' }}><span>{t('bill_discount')}</span><span>-{currency}{showReceipt.billDiscount.toFixed(2)}</span></div>
+                  )}
+                  <div className="receipt-total-row"><span>{t('final_total')}</span><span>{currency}{showReceipt.total.toFixed(2)}</span></div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <p style={{ fontSize: `${settings?.font_size_footer || 12}px`, color: '#7a9e8a', fontStyle: 'italic', margin: '0 0 0.4rem' }}>{settings?.footer_text || t('thank_you')}</p>
+                <div style={{ fontSize: '0.65rem', color: '#b0a898' }}>{new Date().toLocaleString()}</div>
+              </div>
+              <div className="modal-actions no-print">
+                <button className="modal-btn-cancel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => setShowReceipt(null)}><X size={15} /> {t('close')}</button>
+                <button className="modal-btn-confirm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => window.print()}><Printer size={15} /> {t('print')}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
