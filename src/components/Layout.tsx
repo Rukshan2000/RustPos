@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, Package, Tag, 
   History, BarChart3, Settings as SettingsIcon, 
-  Users, LogOut, User 
+  Users, LogOut, User, Truck, FileText 
 } from 'lucide-react';
 import TitleBar from './TitleBar';
 import { useAuth } from '../contexts/AuthContext';
@@ -254,6 +254,14 @@ const Layout: React.FC = () => {
                 </NavLink>
                 <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <BarChart3 size={18} /><span>{t('reports')}</span>
+                </NavLink>
+
+                <div className="nav-section-label">{t('sup_purchasing')}</div>
+                <NavLink to="/suppliers" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Truck size={18} /><span>{t('sup_suppliers')}</span>
+                </NavLink>
+                <NavLink to="/purchases" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <FileText size={18} /><span>{t('sup_purchases')}</span>
                 </NavLink>
 
                 <div className="nav-section-label">{t('admin')}</div>

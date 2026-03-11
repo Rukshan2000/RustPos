@@ -142,6 +142,84 @@ export interface CategoryStockValue {
   total_value: number;
 }
 
+// Supplier interfaces
+export interface Supplier {
+  id?: number;
+  name: string;
+  company_name?: string;
+  contact_person: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  tax_number?: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface SupplierWithStats {
+  id: number;
+  name: string;
+  company_name?: string;
+  contact_person: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  tax_number?: string;
+  notes?: string;
+  created_at?: string;
+  total_purchases: number;
+  outstanding_balance: number;
+}
+
+export interface PurchaseInvoice {
+  id?: number;
+  invoice_number: string;
+  supplier_id: number;
+  date: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  grand_total: number;
+  payment_status: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface PurchaseInvoiceItem {
+  id?: number;
+  invoice_id?: number;
+  product_id: number;
+  quantity: number;
+  purchase_price: number;
+  discount: number;
+  tax: number;
+  subtotal: number;
+}
+
+export interface PurchaseInvoiceItemDetailed {
+  product_name: string;
+  quantity: number;
+  purchase_price: number;
+  discount: number;
+  tax: number;
+  subtotal: number;
+}
+
+export interface PurchaseInvoiceWithItems {
+  invoice: PurchaseInvoice;
+  items: PurchaseInvoiceItemDetailed[];
+  supplier_name: string;
+}
+
+export interface PurchaseInvoiceSummary {
+  id: number;
+  invoice_number: string;
+  supplier_name: string;
+  date: string;
+  grand_total: number;
+  payment_status: string;
+}
+
 export const api = {
   // Categories
   getCategories: () => invoke<Category[]>("get_categories"),
@@ -274,6 +352,33 @@ export const api = {
   getStockReport: () => invoke<StockReport[]>("get_stock_report"),
   getExpiryReport: () => invoke<ExpiryReport[]>("get_expiry_report"),
   getCategoryStockValue: () => invoke<CategoryStockValue[]>("get_category_stock_value"),
+
+  // --- Suppliers ---
+  getSuppliers: () => invoke<SupplierWithStats[]>("get_suppliers"),
+  addSupplier: (s: Supplier) => invoke<number>("add_supplier", {
+    name: s.name, companyName: s.company_name, contactPerson: s.contact_person,
+    phone: s.phone, email: s.email, address: s.address, taxNumber: s.tax_number, notes: s.notes,
+  }),
+  updateSupplier: (s: Supplier) => invoke<void>("update_supplier", {
+    id: s.id, name: s.name, companyName: s.company_name, contactPerson: s.contact_person,
+    phone: s.phone, email: s.email, address: s.address, taxNumber: s.tax_number, notes: s.notes,
+  }),
+  deleteSupplier: (id: number) => invoke<void>("delete_supplier", { id }),
+
+  // --- Purchase Invoices ---
+  createPurchaseInvoice: (
+    supplierId: number, date: string, subtotal: number, discount: number,
+    tax: number, grandTotal: number, paymentStatus: string, notes: string | undefined,
+    items: PurchaseInvoiceItem[]
+  ) => invoke<number>("create_purchase_invoice", {
+    supplierId, date, subtotal, discount, tax, grandTotal, paymentStatus, notes, items,
+  }),
+  getPurchaseInvoices: (supplierId?: number, startDate?: string, endDate?: string, paymentStatus?: string) =>
+    invoke<PurchaseInvoiceSummary[]>("get_purchase_invoices", { supplierId, startDate, endDate, paymentStatus }),
+  getPurchaseInvoiceDetails: (invoiceId: number) =>
+    invoke<PurchaseInvoiceWithItems>("get_purchase_invoice_details", { invoiceId }),
+  updatePurchaseInvoiceStatus: (invoiceId: number, paymentStatus: string) =>
+    invoke<void>("update_purchase_invoice_status", { invoiceId, paymentStatus }),
 };
 
 // Helper: format a quantity with its unit for display

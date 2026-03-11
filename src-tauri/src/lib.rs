@@ -53,7 +53,15 @@ pub fn run() {
             get_hourly_sales,
             get_stock_report,
             get_expiry_report,
-            get_category_stock_value
+            get_category_stock_value,
+            get_suppliers,
+            add_supplier,
+            update_supplier,
+            delete_supplier,
+            create_purchase_invoice,
+            get_purchase_invoices,
+            get_purchase_invoice_details,
+            update_purchase_invoice_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -164,3 +164,90 @@ pub struct CategoryStockValue {
     pub product_count: i64,
     pub total_value: f64,
 }
+
+// ── Supplier models ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct Supplier {
+    pub id: Option<i64>,
+    pub name: String,
+    pub company_name: Option<String>,
+    pub contact_person: String,
+    pub phone: String,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub tax_number: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SupplierWithStats {
+    pub id: i64,
+    pub name: String,
+    pub company_name: Option<String>,
+    pub contact_person: String,
+    pub phone: String,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub tax_number: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: Option<String>,
+    pub total_purchases: f64,
+    pub outstanding_balance: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseInvoice {
+    pub id: Option<i64>,
+    pub invoice_number: String,
+    pub supplier_id: i64,
+    pub date: String,
+    pub subtotal: f64,
+    pub discount: f64,
+    pub tax: f64,
+    pub grand_total: f64,
+    pub payment_status: String, // "paid", "unpaid", "partial"
+    pub notes: Option<String>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseInvoiceItem {
+    pub id: Option<i64>,
+    pub invoice_id: Option<i64>,
+    pub product_id: i64,
+    pub quantity: f64,
+    pub purchase_price: f64,
+    pub discount: f64,
+    pub tax: f64,
+    pub subtotal: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseInvoiceWithItems {
+    pub invoice: PurchaseInvoice,
+    pub items: Vec<PurchaseInvoiceItemDetailed>,
+    pub supplier_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseInvoiceItemDetailed {
+    pub product_name: String,
+    pub quantity: f64,
+    pub purchase_price: f64,
+    pub discount: f64,
+    pub tax: f64,
+    pub subtotal: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseInvoiceSummary {
+    pub id: i64,
+    pub invoice_number: String,
+    pub supplier_name: String,
+    pub date: String,
+    pub grand_total: f64,
+    pub payment_status: String,
+}

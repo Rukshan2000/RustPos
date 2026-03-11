@@ -3,6 +3,8 @@ use crate::models::{
     Product, Sale, SaleItem, SaleWithItems, SaleItemDetailed, Settings, Category, DashboardStats,
     SalesByPeriod, PaymentMethodSummary, TopProduct, CategorySales, HourlySales,
     StockReport, ExpiryReport, CategoryStockValue,
+    SupplierWithStats, PurchaseInvoice, PurchaseInvoiceItem,
+    PurchaseInvoiceWithItems, PurchaseInvoiceItemDetailed, PurchaseInvoiceSummary,
 };
 use rusqlite::params;
 use tauri::State;
@@ -1021,4 +1023,250 @@ pub fn verify_kiosk_pin(state: State<DbState>, pin: String) -> Result<bool, Stri
         Some(p) => Ok(p == pin),
         None => Ok(false),
     }
+}
+
+// ── Supplier Management ──
+
+#[tauri::command]
+pub fn get_suppliers(state: State<DbState>) -> Result<Vec<SupplierWithStats>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT s.id, s.name, s.company_name, s.contact_person, s.phone, s.email, s.address, s.tax_number, s.notes, s.created_at,
+            COALESCE((SELECT SUM(pi.grand_total) FROM purchase_invoices pi WHERE pi.supplier_id = s.id), 0),
+            COALESCE((SELECT SUM(pi.grand_total) FROM purchase_invoices pi WHERE pi.supplier_id = s.id AND pi.payment_status != 'paid'), 0)
+         FROM suppliers s
+         ORDER BY s.name ASC"
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(SupplierWithStats {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            company_name: row.get(2)?,
+            contact_person: row.get(3)?,
+            phone: row.get(4)?,
+            email: row.get(5)?,
+            address: row.get(6)?,
+            tax_number: row.get(7)?,
+            notes: row.get(8)?,
+            created_at: row.get(9)?,
+            total_purchases: row.get(10)?,
+            outstanding_balance: row.get(11)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn add_supplier(
+    state: State<DbState>,
+    name: String,
+    company_name: Option<String>,
+    contact_person: String,
+    phone: String,
+    email: Option<String>,
+    address: Option<String>,
+    tax_number: Option<String>,
+    notes: Option<String>,
+) -> Result<i64, String> {
+    let conn = state.0.lock().unwrap();
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT INTO suppliers (name, company_name, contact_person, phone, email, address, tax_number, notes, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![name, company_name, contact_person, phone, email, address, tax_number, notes, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(conn.last_insert_rowid())
+}
+
+#[tauri::command]
+pub fn update_supplier(
+    state: State<DbState>,
+    id: i64,
+    name: String,
+    company_name: Option<String>,
+    contact_person: String,
+    phone: String,
+    email: Option<String>,
+    address: Option<String>,
+    tax_number: Option<String>,
+    notes: Option<String>,
+) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "UPDATE suppliers SET name=?1, company_name=?2, contact_person=?3, phone=?4, email=?5, address=?6, tax_number=?7, notes=?8 WHERE id=?9",
+        params![name, company_name, contact_person, phone, email, address, tax_number, notes, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_supplier(state: State<DbState>, id: i64) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    // Check if supplier has invoices
+    let inv_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM purchase_invoices WHERE supplier_id = ?",
+        params![id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    if inv_count > 0 {
+        return Err("Cannot delete supplier with existing purchase invoices.".to_string());
+    }
+    conn.execute("DELETE FROM suppliers WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ── Purchase Invoices ──
+
+#[tauri::command]
+pub fn create_purchase_invoice(
+    state: State<DbState>,
+    supplier_id: i64,
+    date: String,
+    subtotal: f64,
+    discount: f64,
+    tax: f64,
+    grand_total: f64,
+    payment_status: String,
+    notes: Option<String>,
+    items: Vec<PurchaseInvoiceItem>,
+) -> Result<i64, String> {
+    let mut conn = state.0.lock().unwrap();
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    // Auto-generate invoice number: PUR-XXXXX
+    let count: i64 = tx.query_row("SELECT COUNT(*) FROM purchase_invoices", [], |row| row.get(0)).unwrap_or(0);
+    let invoice_number = format!("PUR-{:05}", count + 1);
+
+    tx.execute(
+        "INSERT INTO purchase_invoices (invoice_number, supplier_id, date, subtotal, discount, tax, grand_total, payment_status, notes, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![invoice_number, supplier_id, date, subtotal, discount, tax, grand_total, payment_status, notes, now],
+    ).map_err(|e| e.to_string())?;
+
+    let invoice_id = tx.last_insert_rowid();
+
+    for item in &items {
+        tx.execute(
+            "INSERT INTO purchase_invoice_items (invoice_id, product_id, quantity, purchase_price, discount, tax, subtotal) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![invoice_id, item.product_id, item.quantity, item.purchase_price, item.discount, item.tax, item.subtotal],
+        ).map_err(|e| e.to_string())?;
+
+        // Automatically increase product stock
+        tx.execute(
+            "UPDATE products SET stock = stock + ? WHERE id = ?",
+            params![item.quantity, item.product_id],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(invoice_id)
+}
+
+#[tauri::command]
+pub fn get_purchase_invoices(
+    state: State<DbState>,
+    supplier_id: Option<i64>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    payment_status: Option<String>,
+) -> Result<Vec<PurchaseInvoiceSummary>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut query = "SELECT pi.id, pi.invoice_number, s.name, pi.date, pi.grand_total, pi.payment_status
+         FROM purchase_invoices pi
+         JOIN suppliers s ON pi.supplier_id = s.id
+         WHERE 1=1".to_string();
+    let mut params_vec: Vec<String> = Vec::new();
+
+    if let Some(sid) = supplier_id {
+        query.push_str(&format!(" AND pi.supplier_id = {}", sid));
+    }
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" AND pi.date >= ? AND pi.date <= ?");
+        params_vec.push(format!("{} 00:00:00", s));
+        params_vec.push(format!("{} 23:59:59", e));
+    }
+    if let Some(ps) = &payment_status {
+        if !ps.is_empty() {
+            query.push_str(&format!(" AND pi.payment_status = '{}'", ps.replace('\'', "''")));
+        }
+    }
+    query.push_str(" ORDER BY pi.id DESC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+        Ok(PurchaseInvoiceSummary {
+            id: row.get(0)?,
+            invoice_number: row.get(1)?,
+            supplier_name: row.get(2)?,
+            date: row.get(3)?,
+            grand_total: row.get(4)?,
+            payment_status: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_purchase_invoice_details(state: State<DbState>, invoice_id: i64) -> Result<PurchaseInvoiceWithItems, String> {
+    let conn = state.0.lock().unwrap();
+
+    let (invoice, supplier_name) = conn.query_row(
+        "SELECT pi.id, pi.invoice_number, pi.supplier_id, pi.date, pi.subtotal, pi.discount, pi.tax, pi.grand_total, pi.payment_status, pi.notes, pi.created_at, s.name
+         FROM purchase_invoices pi
+         JOIN suppliers s ON pi.supplier_id = s.id
+         WHERE pi.id = ?",
+        params![invoice_id],
+        |row| {
+            Ok((PurchaseInvoice {
+                id: Some(row.get(0)?),
+                invoice_number: row.get(1)?,
+                supplier_id: row.get(2)?,
+                date: row.get(3)?,
+                subtotal: row.get(4)?,
+                discount: row.get(5)?,
+                tax: row.get(6)?,
+                grand_total: row.get(7)?,
+                payment_status: row.get(8)?,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+            }, row.get::<_, String>(11)?))
+        }
+    ).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn.prepare(
+        "SELECT p.name, pii.quantity, pii.purchase_price, pii.discount, pii.tax, pii.subtotal
+         FROM purchase_invoice_items pii
+         JOIN products p ON pii.product_id = p.id
+         WHERE pii.invoice_id = ?"
+    ).map_err(|e| e.to_string())?;
+
+    let items = stmt.query_map(params![invoice_id], |row| {
+        Ok(PurchaseInvoiceItemDetailed {
+            product_name: row.get(0)?,
+            quantity: row.get(1)?,
+            purchase_price: row.get(2)?,
+            discount: row.get(3)?,
+            tax: row.get(4)?,
+            subtotal: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    Ok(PurchaseInvoiceWithItems { invoice, items, supplier_name })
+}
+
+#[tauri::command]
+pub fn update_purchase_invoice_status(
+    state: State<DbState>,
+    invoice_id: i64,
+    payment_status: String,
+) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "UPDATE purchase_invoices SET payment_status = ? WHERE id = ?",
+        params![payment_status, invoice_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
 }

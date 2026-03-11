@@ -18,6 +18,8 @@ import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import LoginScreen from './pages/LoginScreen';
 import ChangePasswordScreen from './pages/ChangePasswordScreen';
+import SupplierList from './pages/SupplierList';
+import PurchaseInvoices from './pages/PurchaseInvoices';
 
 // Guard: must be logged in
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -85,6 +87,8 @@ const AppRouter: React.FC = () => {
           <Route path="history" element={<AdminRoute><SalesHistory /></AdminRoute>} />
           <Route path="reports" element={<AdminRoute><Reports /></AdminRoute>} />
           <Route path="users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+          <Route path="suppliers" element={<AdminRoute><SupplierList /></AdminRoute>} />
+          <Route path="purchases" element={<AdminRoute><PurchaseInvoices /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
           <Route path="*" element={<Navigate to={currentUser.role === 'admin' ? '/' : '/sales'} replace />} />
         </Route>

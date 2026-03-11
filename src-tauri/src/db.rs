@@ -160,5 +160,58 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
         ).map_err(|e| e.to_string())?;
     }
 
+    // Suppliers table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            company_name TEXT,
+            contact_person TEXT NOT NULL DEFAULT '',
+            phone TEXT NOT NULL DEFAULT '',
+            email TEXT,
+            address TEXT,
+            tax_number TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    // Purchase invoices table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS purchase_invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_number TEXT NOT NULL UNIQUE,
+            supplier_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            subtotal REAL NOT NULL DEFAULT 0,
+            discount REAL NOT NULL DEFAULT 0,
+            tax REAL NOT NULL DEFAULT 0,
+            grand_total REAL NOT NULL DEFAULT 0,
+            payment_status TEXT NOT NULL DEFAULT 'unpaid',
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    // Purchase invoice items table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS purchase_invoice_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            quantity REAL NOT NULL,
+            purchase_price REAL NOT NULL,
+            discount REAL NOT NULL DEFAULT 0,
+            tax REAL NOT NULL DEFAULT 0,
+            subtotal REAL NOT NULL DEFAULT 0,
+            FOREIGN KEY (invoice_id) REFERENCES purchase_invoices(id),
+            FOREIGN KEY (product_id) REFERENCES products(id)
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+
     Ok(conn)
 }
