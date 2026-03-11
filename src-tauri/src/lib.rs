@@ -25,6 +25,8 @@ pub fn run() {
             get_categories,
             add_category,
             delete_category,
+            generate_barcode,
+            check_barcode_unique,
             complete_sale,
             get_sales_history,
             get_sale_details,
@@ -42,7 +44,16 @@ pub fn run() {
             delete_user,
             reset_user_password,
             get_expiring_products,
-            reset_db
+            reset_db,
+            verify_kiosk_pin,
+            get_sales_by_period,
+            get_payment_method_summary,
+            get_top_products,
+            get_category_sales,
+            get_hourly_sales,
+            get_stock_report,
+            get_expiry_report,
+            get_category_stock_value
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

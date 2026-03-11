@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, ImageIcon, X, Upload } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Edit2, Trash2, Search, ImageIcon, X, Upload, Printer, QrCode } from 'lucide-react';
 import { api, Product, Category, formatQtyUnit, priceUnitLabel } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
+import { renderBarcodeToCanvas } from '../utils/barcode';
+import BarcodeLabelPrint from '../components/BarcodeLabelPrint';
 
 const UNIT_OPTIONS = [
   { value: 'piece', label: 'Piece' },
@@ -34,6 +36,10 @@ const ProductList: React.FC = () => {
   const [allowDecimal, setAllowDecimal] = useState(false);
   const [expiryDate, setExpiryDate] = useState('');
 
+  // Barcode & printing states
+  const [printLabelProducts, setPrintLabelProducts] = useState<{ product: Product; quantity: number }[] | null>(null);
+  const [selectedForBatch, setSelectedForBatch] = useState<Set<number>>(new Set());
+  const [barcodeGenerating, setBarcodeGenerating] = useState(false);
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
@@ -59,13 +65,29 @@ const ProductList: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const productData = {
-      name, price: parseFloat(price), stock: parseFloat(stock),
-      barcode: barcode || undefined, category_id: categoryId ? parseInt(categoryId) : undefined,
-      image_url: imageUrl || undefined, base_unit: baseUnit,
-      allow_decimal_quantity: allowDecimal, expiry_date: expiryDate || null,
-    };
     try {
+      let finalBarcode = barcode || undefined;
+
+      // Validate barcode uniqueness if provided
+      if (finalBarcode) {
+        const isUnique = await api.checkBarcodeUnique(finalBarcode, editingProduct?.id);
+        if (!isUnique) {
+          alertCustom(t('barcode_duplicate'), t('product_error'), "error");
+          return;
+        }
+      }
+      
+      // Auto-generate barcode if not provided
+      if (!finalBarcode) {
+        finalBarcode = await api.generateBarcode();
+      }
+
+      const productData = {
+        name, price: parseFloat(price), stock: parseFloat(stock),
+        barcode: finalBarcode, category_id: categoryId ? parseInt(categoryId) : undefined,
+        image_url: imageUrl || undefined, base_unit: baseUnit,
+        allow_decimal_quantity: allowDecimal, expiry_date: expiryDate || null,
+      };
       if (editingProduct) await api.updateProduct({ ...productData, id: editingProduct.id! });
       else await api.addProduct(productData);
       setIsModalOpen(false); loadData();
@@ -82,31 +104,41 @@ const ProductList: React.FC = () => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      const rows = text.split('\n').filter(row => row.trim());
-      if (rows.length < 2) { notify("CSV file must have a header and at least one data row.", "warning"); return; }
-      const header = rows[0].split(',').map(h => h.trim().toLowerCase());
-      const productsToUpload: Product[] = [];
-      for (let i = 1; i < rows.length; i++) {
-        const values = rows[i].split(',').map(v => v.trim());
-        const product: any = { base_unit: 'piece', allow_decimal_quantity: false, expiry_date: null };
-        header.forEach((h, index) => {
-          const val = values[index]; if (!val) return;
-          if (h === 'name') product.name = val;
-          else if (h === 'price') product.price = parseFloat(val);
-          else if (h === 'stock') product.stock = parseFloat(val);
-          else if (h === 'barcode') product.barcode = val;
-          else if (h === 'category_id') product.category_id = parseInt(val);
-          else if (h === 'base_unit') product.base_unit = val;
-          else if (h === 'allow_decimal_quantity') product.allow_decimal_quantity = val.toLowerCase() === 'true' || val === '1';
-          else if (h === 'expiry_date') product.expiry_date = val;
-        });
-        if (product.name && !isNaN(product.price)) productsToUpload.push(product as Product);
+      try {
+        let text = event.target?.result as string;
+        if (!text) { notify(t('csv_header_error'), "warning"); return; }
+        // Strip BOM (Excel-exported CSV)
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const rows = text.split(/\r?\n/).filter(row => row.trim());
+        if (rows.length < 2) { notify(t('csv_header_error'), "warning"); return; }
+        const header = rows[0].split(',').map(h => h.trim().toLowerCase());
+        const productsToUpload: Product[] = [];
+        for (let i = 1; i < rows.length; i++) {
+          const values = rows[i].split(',').map(v => v.trim());
+          const product: any = { stock: 0, base_unit: 'piece', allow_decimal_quantity: false, expiry_date: null };
+          header.forEach((h, index) => {
+            const val = values[index]; if (!val) return;
+            if (h === 'name') product.name = val;
+            else if (h === 'price') product.price = parseFloat(val);
+            else if (h === 'stock') product.stock = parseFloat(val) || 0;
+            else if (h === 'barcode') product.barcode = val;
+            else if (h === 'category_id') product.category_id = parseInt(val);
+            else if (h === 'base_unit') product.base_unit = val;
+            else if (h === 'allow_decimal_quantity') product.allow_decimal_quantity = val.toLowerCase() === 'true' || val === '1';
+            else if (h === 'expiry_date') product.expiry_date = val;
+          });
+          if (product.name && !isNaN(product.price)) productsToUpload.push(product as Product);
+        }
+        if (productsToUpload.length > 0) {
+          try {
+            const count = await api.bulkAddProducts(productsToUpload);
+            notify(`${t('successfully_uploaded')} ${count} ${t('products_suffix')}`, "success");
+            loadData();
+          } catch (err) { alertCustom(t('err_upload_products') + err, t('upload_error'), "error"); }
+        } else notify(t('no_valid_products_csv'), "warning");
+      } catch (err) {
+        alertCustom(t('err_upload_products') + err, t('upload_error'), "error");
       }
-      if (productsToUpload.length > 0) {
-        try { const count = await api.bulkAddProducts(productsToUpload); notify(`${t('successfully_uploaded')} ${count} ${t('products_suffix')}`, "success"); loadData(); }
-        catch (err) { alertCustom(t('err_upload_products') + err, t('upload_error'), "error"); }
-      } else notify(t('no_valid_products_csv'), "warning");
     };
     reader.readAsText(file); e.target.value = '';
   };
@@ -116,6 +148,42 @@ const ProductList: React.FC = () => {
   const handleUnitChange = (unit: string) => {
     setBaseUnit(unit);
     setAllowDecimal(['kg', 'g', 'l', 'ml'].includes(unit));
+  };
+
+  const handleGenerateBarcode = async () => {
+    setBarcodeGenerating(true);
+    try {
+      const bc = await api.generateBarcode();
+      setBarcode(bc);
+    } catch (err) { notify(t('err_generate_barcode') + err, "error"); }
+    finally { setBarcodeGenerating(false); }
+  };
+
+  const toggleBatchSelect = (id: number) => {
+    setSelectedForBatch(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    const allIds = filtered.filter(p => p.barcode).map(p => p.id!);
+    setSelectedForBatch(prev => {
+      if (allIds.every(id => prev.has(id))) return new Set();
+      return new Set(allIds);
+    });
+  };
+
+  const openBatchPrint = () => {
+    const selected = products.filter(p => selectedForBatch.has(p.id!) && p.barcode);
+    if (selected.length === 0) { notify(t('no_products_selected'), "warning"); return; }
+    setPrintLabelProducts(selected.map(p => ({ product: p, quantity: 1 })));
+  };
+
+  const openSinglePrint = (product: Product) => {
+    if (!product.barcode) { notify(t('no_barcode'), "warning"); return; }
+    setPrintLabelProducts([{ product, quantity: 1 }]);
   };
 
   return (
@@ -274,6 +342,12 @@ const ProductList: React.FC = () => {
 
         .prod-name { font-weight: 700; color: #1a3528; }
         .prod-barcode { font-size: 0.72rem; color: #7a9e8a; margin-top: 0.1rem; }
+        .prod-barcode-row {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          margin-top: 0.15rem;
+        }
 
         .badge-cat {
           display: inline-block;
@@ -603,6 +677,11 @@ const ProductList: React.FC = () => {
         <div className="pl-header">
           <h1 className="pl-title">{t('products')}</h1>
           <div className="pl-actions">
+            {selectedForBatch.size > 0 && (
+              <button className="btn-outline-green" onClick={openBatchPrint}>
+                <Printer size={16} /> {t('print_labels')} ({selectedForBatch.size})
+              </button>
+            )}
             <label className="btn-outline-green">
               <Upload size={16} /> {t('bulk_upload')}
               <input type="file" accept=".csv" style={{ display: 'none' }} onChange={handleBulkUpload} />
@@ -630,6 +709,14 @@ const ProductList: React.FC = () => {
           <table className="pl-table">
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={filtered.filter(p => p.barcode).length > 0 && filtered.filter(p => p.barcode).every(p => selectedForBatch.has(p.id!))}
+                    onChange={selectAllVisible}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
                 <th>{t('image')}</th>
                 <th>{t('name')}</th>
                 <th>{t('category')}</th>
@@ -644,6 +731,15 @@ const ProductList: React.FC = () => {
               {filtered.map(p => (
                 <tr key={p.id}>
                   <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedForBatch.has(p.id!)}
+                      onChange={() => toggleBatchSelect(p.id!)}
+                      disabled={!p.barcode}
+                      style={{ cursor: p.barcode ? 'pointer' : 'default' }}
+                    />
+                  </td>
+                  <td>
                     <div className="prod-img-cell">
                       {p.image_url
                         ? <img src={p.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -652,7 +748,14 @@ const ProductList: React.FC = () => {
                   </td>
                   <td>
                     <div className="prod-name">{p.name}</div>
-                    <div className="prod-barcode">{p.barcode || '—'}</div>
+                    {p.barcode ? (
+                      <div className="prod-barcode-row">
+                        <BarcodeInline value={p.barcode} />
+                        <span className="prod-barcode">{p.barcode}</span>
+                      </div>
+                    ) : (
+                      <div className="prod-barcode">—</div>
+                    )}
                   </td>
                   <td>
                     <span className="badge-cat">
@@ -677,6 +780,9 @@ const ProductList: React.FC = () => {
                   <td>
                     <div style={{ display: 'flex', gap: '0.25rem' }}>
                       <button className="tbl-icon-btn tbl-icon-btn-edit" onClick={() => openModal(p)} title="Edit"><Edit2 size={16} /></button>
+                      {p.barcode && (
+                        <button className="tbl-icon-btn tbl-icon-btn-edit" onClick={() => openSinglePrint(p)} title={t('print_barcode_label')}><Printer size={16} /></button>
+                      )}
                       <button className="tbl-icon-btn tbl-icon-btn-del" onClick={() => deleteProduct(p.id!)} title="Delete"><Trash2 size={16} /></button>
                     </div>
                   </td>
@@ -711,7 +817,12 @@ const ProductList: React.FC = () => {
                   </div>
                   <div className="form-group">
                     <label className="form-label">{t('barcode')}</label>
-                    <input className="form-input" value={barcode} onChange={e => setBarcode(e.target.value)} placeholder={t('scan_barcode')} />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input className="form-input" style={{ flex: 1 }} value={barcode} onChange={e => setBarcode(e.target.value)} placeholder={t('scan_barcode')} />
+                      <button type="button" className="btn-outline-green" style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }} onClick={handleGenerateBarcode} disabled={barcodeGenerating}>
+                        <QrCode size={14} /> {t('generate')}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -778,9 +889,27 @@ const ProductList: React.FC = () => {
             </div>
           </div>
         )}
+        {/* Barcode Label Print Modal */}
+        {printLabelProducts && (
+          <BarcodeLabelPrint
+            products={printLabelProducts}
+            onClose={() => { setPrintLabelProducts(null); setSelectedForBatch(new Set()); }}
+          />
+        )}
       </div>
     </>
   );
+};
+
+/** Tiny inline barcode preview for the table */
+const BarcodeInline: React.FC<{ value: string }> = ({ value }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (canvasRef.current) {
+      renderBarcodeToCanvas(canvasRef.current, value, { width: 1, height: 18, margin: 0 });
+    }
+  }, [value]);
+  return <canvas ref={canvasRef} style={{ height: 18, maxWidth: 80 }} />;
 };
 
 export default ProductList;

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield } from 'lucide-react';
 import { api } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
+import { useKiosk } from '../contexts/KioskContext';
 
 const Settings: React.FC = () => {
   const [shopName, setShopName] = useState('');
@@ -18,9 +19,14 @@ const Settings: React.FC = () => {
   const [backupPath, setBackupPath] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetInput, setResetInput] = useState('');
+  const [kioskEnabled, setKioskEnabled] = useState(false);
+  const [kioskPin, setKioskPin] = useState('');
+  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(5);
+  const [autoStartKiosk, setAutoStartKiosk] = useState(false);
   const { refreshSettings } = useSettings();
   const { notify, alertCustom, confirmCustom } = useNotifications();
   const { t, i18n } = useTranslation();
+  const { isKioskActive, enterKiosk } = useKiosk();
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;
@@ -37,6 +43,8 @@ const Settings: React.FC = () => {
       setLogoUrl(s.logo_url || ''); setFooterText(s.footer_text || '');
       setFontSizeHeader(s.font_size_header); setFontSizeBody(s.font_size_body);
       setFontSizeFooter(s.font_size_footer); setCurrency(s.currency);
+      setKioskEnabled(s.kiosk_enabled); setKioskPin(s.kiosk_pin || '');
+      setIdleTimeoutMinutes(s.idle_timeout_minutes); setAutoStartKiosk(s.auto_start_kiosk);
     } catch (e) { console.error(e); }
   };
 
@@ -44,7 +52,7 @@ const Settings: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency });
+      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk });
       await refreshSettings();
       notify("Settings saved successfully!", "success");
     } catch (e) { alertCustom("Error saving settings: " + e, "Settings Error", "error"); }
@@ -546,6 +554,98 @@ const Settings: React.FC = () => {
               <button className="st-reset-btn" onClick={handleResetClick} disabled={loading}>
                 <Trash2 size={16} /> {t('total_factory_reset')}
               </button>
+            </div>
+
+            {/* Kiosk Mode card */}
+            <div className="st-card">
+              <h2 className="st-card-title">
+                <Shield size={17} color="#2d5a3d" /> {t('kiosk_mode')}
+              </h2>
+              <p style={{ color: '#7a9e8a', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                {t('kiosk_mode_desc')}
+              </p>
+
+              <div className="st-form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={kioskEnabled}
+                    onChange={e => setKioskEnabled(e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: '#2d5a3d' }}
+                  />
+                  <span style={{ fontWeight: 700, color: '#1a3528', fontSize: '0.9rem' }}>{t('kiosk_enable')}</span>
+                </label>
+              </div>
+
+              {kioskEnabled && (
+                <>
+                  <div className="st-form-group">
+                    <label className="st-label">{t('kiosk_pin_label')}</label>
+                    <input
+                      type="password"
+                      className="st-input"
+                      value={kioskPin}
+                      onChange={e => setKioskPin(e.target.value)}
+                      placeholder={t('kiosk_pin_placeholder')}
+                      maxLength={20}
+                      autoComplete="off"
+                    />
+                    <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem' }}>{t('kiosk_pin_hint')}</span>
+                  </div>
+
+                  <div className="st-form-grid-2">
+                    <div className="st-form-group" style={{ marginBottom: 0 }}>
+                      <label className="st-label">{t('kiosk_idle_timeout')}</label>
+                      <input
+                        type="number"
+                        className="st-input"
+                        value={idleTimeoutMinutes}
+                        onChange={e => setIdleTimeoutMinutes(Math.max(1, parseInt(e.target.value) || 1))}
+                        min={1}
+                        max={60}
+                      />
+                    </div>
+                    <div className="st-form-group" style={{ marginBottom: 0 }}>
+                      <label className="st-label">&nbsp;</label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.7rem 0' }}>
+                        <input
+                          type="checkbox"
+                          checked={autoStartKiosk}
+                          onChange={e => setAutoStartKiosk(e.target.checked)}
+                          style={{ width: '16px', height: '16px', accentColor: '#2d5a3d' }}
+                        />
+                        <span style={{ fontWeight: 600, color: '#1a3528', fontSize: '0.82rem' }}>{t('kiosk_auto_start')}</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {!isKioskActive && (
+                    <button
+                      type="button"
+                      className="st-save-btn"
+                      style={{ marginTop: '1rem', background: '#8b5e3c', boxShadow: '0 3px 10px rgba(139,94,60,0.25)' }}
+                      onClick={async () => {
+                        if (!kioskPin.trim()) {
+                          alertCustom(t('kiosk_pin_required'), t('kiosk_mode'), 'warning');
+                          return;
+                        }
+                        await enterKiosk();
+                      }}
+                    >
+                      <Shield size={16} /> {t('kiosk_enter_now')}
+                    </button>
+                  )}
+
+                  <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#edeae0', borderRadius: '0.625rem', border: '1.5px solid #ddd8cc' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1a3528', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                      {t('kiosk_shortcut_title')}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#7a9e8a', lineHeight: 1.6 }}>
+                      {t('kiosk_shortcut_desc')}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

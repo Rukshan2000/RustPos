@@ -73,6 +73,10 @@ export interface Settings {
   font_size_body: number;
   font_size_footer: number;
   currency: string;
+  kiosk_enabled: boolean;
+  kiosk_pin: string | null;
+  idle_timeout_minutes: number;
+  auto_start_kiosk: boolean;
 }
 
 export interface DashboardStats {
@@ -80,6 +84,62 @@ export interface DashboardStats {
   today_orders: number;
   low_stock_count: number;
   expiring_soon_count: number;
+}
+
+// Report interfaces
+export interface SalesByPeriod {
+  period: string;
+  total: number;
+  count: number;
+  discounts: number;
+}
+
+export interface PaymentMethodSummary {
+  payment_method: string;
+  total: number;
+  count: number;
+}
+
+export interface TopProduct {
+  product_name: string;
+  total_qty: number;
+  total_revenue: number;
+}
+
+export interface CategorySales {
+  category_name: string;
+  total: number;
+  count: number;
+}
+
+export interface HourlySales {
+  hour: number;
+  total: number;
+  count: number;
+}
+
+export interface StockReport {
+  product_name: string;
+  stock: number;
+  price: number;
+  value: number;
+  base_unit: string;
+  category_name: string;
+  status: string;
+}
+
+export interface ExpiryReport {
+  product_name: string;
+  stock: number;
+  expiry_date: string;
+  days_left: number;
+  status: string;
+}
+
+export interface CategoryStockValue {
+  category_name: string;
+  product_count: number;
+  total_value: number;
 }
 
 export const api = {
@@ -125,6 +185,11 @@ export const api = {
     expiryDate: product.expiry_date
   }),
   deleteProduct: (id: number) => invoke<void>("delete_product", { id }),
+
+  // Barcode
+  generateBarcode: () => invoke<string>("generate_barcode"),
+  checkBarcodeUnique: (barcode: string, excludeProductId?: number) => 
+    invoke<boolean>("check_barcode_unique", { barcode, excludeProductId }),
   
   // Sales
   completeSale: (
@@ -166,6 +231,10 @@ export const api = {
     fontSizeBody: settings.font_size_body,
     fontSizeFooter: settings.font_size_footer,
     currency: settings.currency,
+    kioskEnabled: settings.kiosk_enabled,
+    kioskPin: settings.kiosk_pin,
+    idleTimeoutMinutes: settings.idle_timeout_minutes,
+    autoStartKiosk: settings.auto_start_kiosk,
   }),
   backupDb: () => invoke<string>("backup_db"),
   restoreDb: (backupPath: string) => invoke<void>("restore_db", { backupPath }),
@@ -187,6 +256,24 @@ export const api = {
   deleteUser: (id: number) => invoke<void>("delete_user", { id }),
   resetUserPassword: (id: number, newPassword: string) =>
     invoke<void>("reset_user_password", { id, newPassword }),
+
+  // --- Kiosk ---
+  verifyKioskPin: (pin: string) => invoke<boolean>("verify_kiosk_pin", { pin }),
+
+  // --- Reports ---
+  getSalesByPeriod: (startDate?: string, endDate?: string, groupBy: string = 'day') =>
+    invoke<SalesByPeriod[]>("get_sales_by_period", { startDate, endDate, groupBy }),
+  getPaymentMethodSummary: (startDate?: string, endDate?: string) =>
+    invoke<PaymentMethodSummary[]>("get_payment_method_summary", { startDate, endDate }),
+  getTopProducts: (startDate?: string, endDate?: string, limit?: number) =>
+    invoke<TopProduct[]>("get_top_products", { startDate, endDate, limit }),
+  getCategorySales: (startDate?: string, endDate?: string) =>
+    invoke<CategorySales[]>("get_category_sales", { startDate, endDate }),
+  getHourlySales: (startDate?: string, endDate?: string) =>
+    invoke<HourlySales[]>("get_hourly_sales", { startDate, endDate }),
+  getStockReport: () => invoke<StockReport[]>("get_stock_report"),
+  getExpiryReport: () => invoke<ExpiryReport[]>("get_expiry_report"),
+  getCategoryStockValue: () => invoke<CategoryStockValue[]>("get_category_stock_value"),
 };
 
 // Helper: format a quantity with its unit for display

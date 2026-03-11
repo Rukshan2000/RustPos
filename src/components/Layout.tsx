@@ -7,10 +7,12 @@ import {
 } from 'lucide-react';
 import TitleBar from './TitleBar';
 import { useAuth } from '../contexts/AuthContext';
+import { useKiosk } from '../contexts/KioskContext';
 import { useTranslation } from 'react-i18next';
 
 const Layout: React.FC = () => {
   const { currentUser, logout } = useAuth();
+  const { isKioskActive } = useKiosk();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -210,8 +212,8 @@ const Layout: React.FC = () => {
       `}</style>
 
       <div className="layout-root">
-        <TitleBar />
-        <div className="app-container" style={{ height: 'calc(100vh - 44px)' }}>
+        {!isKioskActive && <TitleBar />}
+        <div className="app-container" style={{ height: isKioskActive ? '100vh' : 'calc(100vh - 44px)' }}>
           {isAdmin && (
             <aside className="sidebar">
               {/* Brand */}

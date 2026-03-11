@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, Tag, X, Printer, Package } from 'lucide-react';
 import { api, Product, Category, SaleItem, formatQtyUnit, priceUnitLabel } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
@@ -25,8 +25,26 @@ const SalesScreen: React.FC = () => {
   const [itemDiscountModal, setItemDiscountModal] = useState<{ productId: number; name: string; price: number; quantity: number; discountValue: number; discountType: 'percentage' | 'fixed' } | null>(null);
   const [itemDiscountInput, setItemDiscountInput] = useState('');
   const [itemDiscountType, setItemDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadData(); }, []);
+
+  // Global keydown handler for barcode scanner detection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // When Enter is pressed and search has content, try barcode lookup
+      if (e.key === 'Enter' && search.trim()) {
+        const match = products.find(p => p.barcode === search.trim());
+        if (match) {
+          e.preventDefault();
+          handleProductClick(match);
+          setSearch('');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [search, products]);
 
   const loadData = async () => {
     try {
@@ -888,6 +906,7 @@ const SalesScreen: React.FC = () => {
               <input
                 type="text"
                 className="search-input"
+                ref={searchInputRef}
                 placeholder={t('search_product_barcode')}
                 value={search}
                 onChange={(e) => {

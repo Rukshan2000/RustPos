@@ -49,6 +49,9 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE products ADD COLUMN allow_decimal_quantity INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE products ADD COLUMN expiry_date TEXT", []);
 
+    // Migration: ensure unique index on barcode
+    let _ = conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL AND barcode != ''", []);
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS sales (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +118,12 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN font_size_body INTEGER NOT NULL DEFAULT 14", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN font_size_footer INTEGER NOT NULL DEFAULT 12", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN currency TEXT NOT NULL DEFAULT '$'", []);
+
+    // Migration: kiosk mode columns
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN kiosk_enabled INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN kiosk_pin TEXT", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN idle_timeout_minutes INTEGER NOT NULL DEFAULT 5", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN auto_start_kiosk INTEGER NOT NULL DEFAULT 0", []);
 
     // Insert default settings if not exists
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0)).unwrap_or(0);

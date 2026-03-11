@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { useKiosk } from '../contexts/KioskContext';
 import { ShoppingBag, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }> = ({ onNeedPasswordChange }) => {
   const { login } = useAuth();
+  const { isKioskActive } = useKiosk();
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +43,7 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
         
 
         .login-root {
-          min-height: 100vh;
+          min-height: ${isKioskActive ? '100vh' : 'calc(100vh - 44px)'};
           background: #2d5a3d;
           display: flex;
           align-items: center;

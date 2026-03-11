@@ -1,11 +1,16 @@
 use crate::db::DbState;
-use crate::models::{Product, Sale, SaleItem, SaleWithItems, SaleItemDetailed, Settings, Category, DashboardStats};
+use crate::models::{
+    Product, Sale, SaleItem, SaleWithItems, SaleItemDetailed, Settings, Category, DashboardStats,
+    SalesByPeriod, PaymentMethodSummary, TopProduct, CategorySales, HourlySales,
+    StockReport, ExpiryReport, CategoryStockValue,
+};
 use rusqlite::params;
 use tauri::State;
 use chrono::Local;
 use std::fs;
 use tauri::AppHandle;
 use tauri::Manager;
+use rand::Rng;
 
 // --- Categories ---
 
@@ -35,6 +40,45 @@ pub fn delete_category(state: State<DbState>, id: i64) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute("DELETE FROM categories WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// --- Barcode ---
+
+#[tauri::command]
+pub fn generate_barcode(state: State<DbState>) -> Result<String, String> {
+    let conn = state.0.lock().unwrap();
+    let mut rng = rand::thread_rng();
+    loop {
+        let code: u64 = rng.gen_range(100_000_000_000..999_999_999_999);
+        let barcode = format!("{}", code);
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM products WHERE barcode = ?",
+            params![barcode],
+            |row| row.get(0)
+        ).map_err(|e| e.to_string())?;
+        if count == 0 {
+            return Ok(barcode);
+        }
+    }
+}
+
+#[tauri::command]
+pub fn check_barcode_unique(state: State<DbState>, barcode: String, exclude_product_id: Option<i64>) -> Result<bool, String> {
+    let conn = state.0.lock().unwrap();
+    let count: i64 = if let Some(pid) = exclude_product_id {
+        conn.query_row(
+            "SELECT COUNT(*) FROM products WHERE barcode = ? AND id != ?",
+            params![barcode, pid],
+            |row| row.get(0)
+        ).map_err(|e| e.to_string())?
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM products WHERE barcode = ?",
+            params![barcode],
+            |row| row.get(0)
+        ).map_err(|e| e.to_string())?
+    };
+    Ok(count == 0)
 }
 
 // --- Products ---
@@ -95,8 +139,8 @@ pub fn bulk_add_products(state: State<DbState>, products: Vec<Product>) -> Resul
     let mut count = 0;
     for product in products {
         let allow_dec_int: i32 = if product.allow_decimal_quantity { 1 } else { 0 };
-        tx.execute(
-            "INSERT INTO products (name, price, barcode, stock, category_id, image_url, base_unit, allow_decimal_quantity, expiry_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        let result = tx.execute(
+            "INSERT OR IGNORE INTO products (name, price, barcode, stock, category_id, image_url, base_unit, allow_decimal_quantity, expiry_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 product.name,
                 product.price,
@@ -109,7 +153,9 @@ pub fn bulk_add_products(state: State<DbState>, products: Vec<Product>) -> Resul
                 product.expiry_date
             ],
         ).map_err(|e| e.to_string())?;
-        count += 1;
+        if result > 0 {
+            count += 1;
+        }
     }
 
     tx.commit().map_err(|e| e.to_string())?;
@@ -365,18 +411,26 @@ pub fn get_expiring_products(state: State<DbState>) -> Result<Vec<Product>, Stri
 pub fn get_settings(state: State<DbState>) -> Result<Settings, String> {
     let conn = state.0.lock().unwrap();
     conn.query_row(
-        "SELECT shop_name, receipt_text, logo_url, footer_text, font_size_header, font_size_body, font_size_footer, currency FROM settings WHERE id = 1",
+        "SELECT shop_name, receipt_text, logo_url, footer_text, font_size_header, font_size_body, font_size_footer, currency, kiosk_enabled, kiosk_pin, idle_timeout_minutes, auto_start_kiosk FROM settings WHERE id = 1",
         [],
-        |row| Ok(Settings {
-            shop_name: row.get(0)?,
-            receipt_text: row.get(1)?,
-            logo_url: row.get(2)?,
-            footer_text: row.get(3)?,
-            font_size_header: row.get(4)?,
-            font_size_body: row.get(5)?,
-            font_size_footer: row.get(6)?,
-            currency: row.get(7)?,
-        })
+        |row| {
+            let kiosk_en: i32 = row.get(8)?;
+            let auto_start: i32 = row.get(11)?;
+            Ok(Settings {
+                shop_name: row.get(0)?,
+                receipt_text: row.get(1)?,
+                logo_url: row.get(2)?,
+                footer_text: row.get(3)?,
+                font_size_header: row.get(4)?,
+                font_size_body: row.get(5)?,
+                font_size_footer: row.get(6)?,
+                currency: row.get(7)?,
+                kiosk_enabled: kiosk_en != 0,
+                kiosk_pin: row.get(9)?,
+                idle_timeout_minutes: row.get(10)?,
+                auto_start_kiosk: auto_start != 0,
+            })
+        }
     ).map_err(|e| e.to_string())
 }
 
@@ -391,8 +445,14 @@ pub fn update_settings(
     font_size_body: i32,
     font_size_footer: i32,
     currency: String,
+    kiosk_enabled: bool,
+    kiosk_pin: Option<String>,
+    idle_timeout_minutes: i32,
+    auto_start_kiosk: bool,
 ) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
+    let kiosk_en: i32 = if kiosk_enabled { 1 } else { 0 };
+    let auto_start: i32 = if auto_start_kiosk { 1 } else { 0 };
     conn.execute(
         "UPDATE settings SET 
             shop_name = ?1, 
@@ -402,7 +462,11 @@ pub fn update_settings(
             font_size_header = ?5, 
             font_size_body = ?6, 
             font_size_footer = ?7,
-            currency = ?8
+            currency = ?8,
+            kiosk_enabled = ?9,
+            kiosk_pin = ?10,
+            idle_timeout_minutes = ?11,
+            auto_start_kiosk = ?12
          WHERE id = 1",
         params![
             shop_name, 
@@ -412,7 +476,11 @@ pub fn update_settings(
             font_size_header, 
             font_size_body, 
             font_size_footer,
-            currency
+            currency,
+            kiosk_en,
+            kiosk_pin,
+            idle_timeout_minutes,
+            auto_start,
         ],
     ).map_err(|e| e.to_string())?;
     Ok(())
@@ -682,4 +750,275 @@ pub fn reset_user_password(
         params![new_hash, id],
     ).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// --- Kiosk ---
+
+// ── Report commands ──
+
+#[tauri::command]
+pub fn get_sales_by_period(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    group_by: String, // "day", "week", "month"
+) -> Result<Vec<SalesByPeriod>, String> {
+    let conn = state.0.lock().unwrap();
+
+    let date_fmt = match group_by.as_str() {
+        "week" => "strftime('%Y-W%W', date)",
+        "month" => "strftime('%Y-%m', date)",
+        _ => "date(date)", // day
+    };
+
+    let mut query = format!(
+        "SELECT {fmt} as period, COALESCE(SUM(total), 0), COUNT(*), COALESCE(SUM(bill_discount_value + total_product_discount), 0)
+         FROM sales",
+        fmt = date_fmt
+    );
+    let mut params_vec: Vec<String> = Vec::new();
+
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE date >= ? AND date <= ?");
+        params_vec.push(format!("{} 00:00:00", s));
+        params_vec.push(format!("{} 23:59:59", e));
+    }
+
+    query.push_str(&format!(" GROUP BY {fmt} ORDER BY period ASC", fmt = date_fmt));
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+        Ok(SalesByPeriod {
+            period: row.get(0)?,
+            total: row.get(1)?,
+            count: row.get(2)?,
+            discounts: row.get(3)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_payment_method_summary(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<Vec<PaymentMethodSummary>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut query = "SELECT payment_method, COALESCE(SUM(total), 0), COUNT(*) FROM sales".to_string();
+    let mut params_vec: Vec<String> = Vec::new();
+
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE date >= ? AND date <= ?");
+        params_vec.push(format!("{} 00:00:00", s));
+        params_vec.push(format!("{} 23:59:59", e));
+    }
+    query.push_str(" GROUP BY payment_method ORDER BY 2 DESC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+        Ok(PaymentMethodSummary {
+            payment_method: row.get(0)?,
+            total: row.get(1)?,
+            count: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_top_products(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    limit: Option<i64>,
+) -> Result<Vec<TopProduct>, String> {
+    let conn = state.0.lock().unwrap();
+    let lim = limit.unwrap_or(10);
+    let mut query = "SELECT p.name, COALESCE(SUM(si.quantity), 0), COALESCE(SUM(si.subtotal), 0)
+         FROM sale_items si
+         JOIN products p ON si.product_id = p.id
+         JOIN sales s ON si.sale_id = s.id".to_string();
+    let mut params_vec: Vec<String> = Vec::new();
+
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE s.date >= ? AND s.date <= ?");
+        params_vec.push(format!("{} 00:00:00", s));
+        params_vec.push(format!("{} 23:59:59", e));
+    }
+    query.push_str(&format!(" GROUP BY p.id ORDER BY 3 DESC LIMIT {}", lim));
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+        Ok(TopProduct {
+            product_name: row.get(0)?,
+            total_qty: row.get(1)?,
+            total_revenue: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_category_sales(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<Vec<CategorySales>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut query = "SELECT COALESCE(c.name, 'Uncategorized'), COALESCE(SUM(si.subtotal), 0), COUNT(DISTINCT s.id)
+         FROM sale_items si
+         JOIN products p ON si.product_id = p.id
+         JOIN sales s ON si.sale_id = s.id
+         LEFT JOIN categories c ON p.category_id = c.id".to_string();
+    let mut params_vec: Vec<String> = Vec::new();
+
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE s.date >= ? AND s.date <= ?");
+        params_vec.push(format!("{} 00:00:00", s));
+        params_vec.push(format!("{} 23:59:59", e));
+    }
+    query.push_str(" GROUP BY COALESCE(c.name, 'Uncategorized') ORDER BY 2 DESC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+        Ok(CategorySales {
+            category_name: row.get(0)?,
+            total: row.get(1)?,
+            count: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_hourly_sales(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<Vec<HourlySales>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut query = "SELECT CAST(strftime('%H', date) AS INTEGER), COALESCE(SUM(total), 0), COUNT(*)
+         FROM sales".to_string();
+    let mut params_vec: Vec<String> = Vec::new();
+
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE date >= ? AND date <= ?");
+        params_vec.push(format!("{} 00:00:00", s));
+        params_vec.push(format!("{} 23:59:59", e));
+    }
+    query.push_str(" GROUP BY 1 ORDER BY 1 ASC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(params_vec.iter()), |row| {
+        Ok(HourlySales {
+            hour: row.get(0)?,
+            total: row.get(1)?,
+            count: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_stock_report(state: State<DbState>) -> Result<Vec<StockReport>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT p.name, p.stock, p.price, (p.stock * p.price), p.base_unit, COALESCE(c.name, 'Uncategorized'),
+            CASE
+                WHEN p.stock <= 0 THEN 'out_of_stock'
+                WHEN p.stock < 10 THEN 'low_stock'
+                ELSE 'in_stock'
+            END
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
+         ORDER BY p.stock ASC"
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(StockReport {
+            product_name: row.get(0)?,
+            stock: row.get(1)?,
+            price: row.get(2)?,
+            value: row.get(3)?,
+            base_unit: row.get(4)?,
+            category_name: row.get(5)?,
+            status: row.get(6)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_expiry_report(state: State<DbState>) -> Result<Vec<ExpiryReport>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT p.name, p.stock, p.expiry_date,
+            CAST(julianday(p.expiry_date) - julianday('now') AS INTEGER),
+            CASE
+                WHEN julianday(p.expiry_date) < julianday('now') THEN 'expired'
+                WHEN julianday(p.expiry_date) <= julianday('now', '+7 days') THEN 'critical'
+                WHEN julianday(p.expiry_date) <= julianday('now', '+30 days') THEN 'warning'
+                ELSE 'good'
+            END
+         FROM products p
+         WHERE p.expiry_date IS NOT NULL AND p.expiry_date != ''
+         ORDER BY p.expiry_date ASC"
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(ExpiryReport {
+            product_name: row.get(0)?,
+            stock: row.get(1)?,
+            expiry_date: row.get(2)?,
+            days_left: row.get(3)?,
+            status: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_category_stock_value(state: State<DbState>) -> Result<Vec<CategoryStockValue>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(c.name, 'Uncategorized'), COUNT(*), COALESCE(SUM(p.stock * p.price), 0)
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
+         GROUP BY COALESCE(c.name, 'Uncategorized')
+         ORDER BY 3 DESC"
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(CategoryStockValue {
+            category_name: row.get(0)?,
+            product_count: row.get(1)?,
+            total_value: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+// --- Kiosk (original) ---
+
+#[tauri::command]
+pub fn verify_kiosk_pin(state: State<DbState>, pin: String) -> Result<bool, String> {
+    let conn = state.0.lock().unwrap();
+    let stored_pin: Option<String> = conn.query_row(
+        "SELECT kiosk_pin FROM settings WHERE id = 1",
+        [],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    match stored_pin {
+        Some(p) => Ok(p == pin),
+        None => Ok(false),
+    }
 }

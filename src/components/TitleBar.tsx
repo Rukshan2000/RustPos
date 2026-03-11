@@ -2,17 +2,14 @@ import React from 'react';
 import { Minus, Square, X, Copy, LogOut, ShoppingBag } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 
 const TitleBar: React.FC = () => {
   const appWindow = getCurrentWindow();
   const { currentUser, logout } = useAuth();
-  const navigate = useNavigate();
   const [isMaximized, setIsMaximized] = React.useState(false);
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
   };
 
   React.useEffect(() => {
@@ -40,14 +37,7 @@ const TitleBar: React.FC = () => {
 
   const handleMaximize = async () => {
     if (!('__TAURI_INTERNALS__' in window)) return;
-    const maximized = await appWindow.isMaximized();
-    if (maximized) {
-      await appWindow.unmaximize();
-    } else {
-      await appWindow.maximize();
-    }
-    const check = await appWindow.isMaximized();
-    setIsMaximized(check);
+    await appWindow.toggleMaximize();
   };
 
   const handleClose = () => {

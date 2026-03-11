@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { useKiosk } from '../contexts/KioskContext';
 import { ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 
 const ChangePasswordScreen: React.FC<Props> = ({ username, oldPassword }) => {
   const { login } = useAuth();
+  const { isKioskActive } = useKiosk();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNew, setShowNew] = useState(false);
@@ -38,7 +40,7 @@ const ChangePasswordScreen: React.FC<Props> = ({ username, oldPassword }) => {
         
 
         .cp-root {
-          min-height: 100vh;
+          min-height: ${isKioskActive ? '100vh' : 'calc(100vh - 44px)'};
           background: #2d5a3d;
           display: flex;
           align-items: center;

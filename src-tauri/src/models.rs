@@ -58,6 +58,10 @@ pub struct Settings {
     pub font_size_body: i32,
     pub font_size_footer: i32,
     pub currency: String,
+    pub kiosk_enabled: bool,
+    pub kiosk_pin: Option<String>,
+    pub idle_timeout_minutes: i32,
+    pub auto_start_kiosk: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -94,4 +98,69 @@ pub struct UserPublic {
     pub role: String,
     pub is_active: bool,
     pub is_default_password: bool,
+}
+
+// ── Report models ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SalesByPeriod {
+    pub period: String,
+    pub total: f64,
+    pub count: i64,
+    pub discounts: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PaymentMethodSummary {
+    pub payment_method: String,
+    pub total: f64,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TopProduct {
+    pub product_name: String,
+    pub total_qty: f64,
+    pub total_revenue: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CategorySales {
+    pub category_name: String,
+    pub total: f64,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HourlySales {
+    pub hour: i32,
+    pub total: f64,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StockReport {
+    pub product_name: String,
+    pub stock: f64,
+    pub price: f64,
+    pub value: f64,
+    pub base_unit: String,
+    pub category_name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExpiryReport {
+    pub product_name: String,
+    pub stock: f64,
+    pub expiry_date: String,
+    pub days_left: i64,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CategoryStockValue {
+    pub category_name: String,
+    pub product_count: i64,
+    pub total_value: f64,
 }

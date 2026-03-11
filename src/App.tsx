@@ -3,7 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { KioskProvider, useKiosk } from './contexts/KioskContext';
 import Layout from './components/Layout';
+import TitleBar from './components/TitleBar';
+import KioskExitDialog from './components/KioskExitDialog';
 import Dashboard from './pages/Dashboard';
 import SalesScreen from './pages/SalesScreen';
 import ProductList from './pages/ProductList';
@@ -34,6 +37,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 // Actual app with auth-aware routing
 const AppRouter: React.FC = () => {
   const { currentUser } = useAuth();
+  const { isKioskActive } = useKiosk();
   const [changePwdState, setChangePwdState] = useState<{ username: string } | null>(null);
 
   // Reset change password state when user logs out or session changes
@@ -46,16 +50,24 @@ const AppRouter: React.FC = () => {
   if (!currentUser) {
     if (changePwdState) {
       return (
-        <ChangePasswordScreen
-          username={changePwdState.username}
-          oldPassword="admin"
-        />
+        <>
+          {!isKioskActive && <TitleBar />}
+          <ChangePasswordScreen
+            username={changePwdState.username}
+            oldPassword="admin"
+          />
+          <KioskExitDialog />
+        </>
       );
     }
     return (
-      <LoginScreen
-        onNeedPasswordChange={(username) => setChangePwdState({ username })}
-      />
+      <>
+        {!isKioskActive && <TitleBar />}
+        <LoginScreen
+          onNeedPasswordChange={(username) => setChangePwdState({ username })}
+        />
+        <KioskExitDialog />
+      </>
     );
   }
 
@@ -77,6 +89,7 @@ const AppRouter: React.FC = () => {
           <Route path="*" element={<Navigate to={currentUser.role === 'admin' ? '/' : '/sales'} replace />} />
         </Route>
       </Routes>
+      <KioskExitDialog />
     </BrowserRouter>
   );
 };
@@ -86,7 +99,9 @@ function App() {
     <AuthProvider>
       <NotificationProvider>
         <SettingsProvider>
-          <AppRouter />
+          <KioskProvider>
+            <AppRouter />
+          </KioskProvider>
         </SettingsProvider>
       </NotificationProvider>
     </AuthProvider>
