@@ -43,7 +43,7 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
         
 
         .login-root {
-          min-height: ${isKioskActive ? '100vh' : 'calc(100vh - 44px)'};
+          min-height: ${isKioskActive ? 'calc(100vh - var(--vk-offset, 0px))' : 'calc(100vh - 44px - var(--vk-offset, 0px))'};
           background: #2d5a3d;
           display: flex;
           align-items: center;

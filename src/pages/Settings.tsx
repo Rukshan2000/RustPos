@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield, Monitor } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield, Monitor, Keyboard } from 'lucide-react';
 import { api } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useKiosk } from '../contexts/KioskContext';
 import { useCustomerDisplay } from '../contexts/CustomerDisplayContext';
 import type { CustomerDisplayMode } from '../contexts/CustomerDisplayContext';
+import { useVirtualKeyboard } from '../contexts/VirtualKeyboardContext';
 
 const Settings: React.FC = () => {
   const [shopName, setShopName] = useState('');
@@ -35,6 +36,7 @@ const Settings: React.FC = () => {
     monitors, refreshMonitors,
     isDisplayOpen, openCustomerDisplay, closeCustomerDisplay,
   } = useCustomerDisplay();
+  const { enabled: vkEnabled, setEnabled: setVkEnabled } = useVirtualKeyboard();
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;
@@ -748,6 +750,37 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Virtual Keyboard card */}
+            <div className="st-card">
+              <h2 className="st-card-title">
+                <Keyboard size={17} color="#2d5a3d" /> {t('vk_title')}
+              </h2>
+              <p style={{ color: '#7a9e8a', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                {t('vk_description')}
+              </p>
+
+              <div className="st-form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={vkEnabled}
+                    onChange={e => setVkEnabled(e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: '#2d5a3d' }}
+                  />
+                  <span style={{ fontWeight: 700, color: '#1a3528', fontSize: '0.9rem' }}>{t('vk_enable')}</span>
+                </label>
+              </div>
+
+              <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#edeae0', borderRadius: '0.625rem', border: '1.5px solid #ddd8cc' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1a3528', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                  {t('vk_info_title')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#7a9e8a', lineHeight: 1.6 }}>
+                  {t('vk_info_desc')}
+                </div>
+              </div>
             </div>
           </div>
 

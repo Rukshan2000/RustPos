@@ -5,6 +5,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { KioskProvider, useKiosk } from './contexts/KioskContext';
 import { CustomerDisplayProvider } from './contexts/CustomerDisplayContext';
+import { VirtualKeyboardProvider } from './contexts/VirtualKeyboardContext';
 import Layout from './components/Layout';
 import TitleBar from './components/TitleBar';
 import KioskExitDialog from './components/KioskExitDialog';
@@ -22,6 +23,7 @@ import ChangePasswordScreen from './pages/ChangePasswordScreen';
 import SupplierList from './pages/SupplierList';
 import PurchaseInvoices from './pages/PurchaseInvoices';
 import CustomerDisplay from './pages/CustomerDisplay';
+import VirtualKeyboard from './components/VirtualKeyboard';
 
 // Guard: must be logged in
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -113,7 +115,10 @@ function App() {
         <SettingsProvider>
           <CustomerDisplayProvider>
             <KioskProvider>
-              <AppRouter />
+              <VirtualKeyboardProvider>
+                <AppRouter />
+                <VirtualKeyboard />
+              </VirtualKeyboardProvider>
             </KioskProvider>
           </CustomerDisplayProvider>
         </SettingsProvider>

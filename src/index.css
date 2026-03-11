@@ -32,9 +32,10 @@ body {
 .layout-root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - var(--vk-offset, 0px));
   width: 100vw;
   background: var(--bg-main);
+  transition: height 0.15s ease;
 }
 
 button {
@@ -76,8 +77,9 @@ textarea:focus {
 /* Layout */
 .app-container {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - var(--vk-offset, 0px));
   width: 100vw;
+  transition: height 0.15s ease;
 }
 
 .sidebar {
@@ -520,4 +522,27 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ── Virtual Keyboard ─────────────────────── */
+@keyframes vk-slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Keyboard key hover/active states */
+[data-virtual-keyboard] button:hover {
+  filter: brightness(1.25);
+}
+
+[data-virtual-keyboard] button:active {
+  transform: scale(0.94);
+  filter: brightness(0.9);
+}
 }

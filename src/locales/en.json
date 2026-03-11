@@ -351,5 +351,10 @@
   "cd_open_display": "Open Customer Display",
   "cd_close_display": "Close Customer Display",
   "cd_status": "Display Status",
-  "cd_active_message": "Customer display is active and syncing in real-time."
+  "cd_active_message": "Customer display is active and syncing in real-time.",
+  "vk_title": "Virtual Keyboard",
+  "vk_description": "Enable an on-screen virtual keyboard for touchscreen POS terminals. The keyboard appears automatically when you tap on any input field.",
+  "vk_enable": "Enable Virtual Keyboard",
+  "vk_info_title": "How it works",
+  "vk_info_desc": "When enabled, the virtual keyboard will automatically appear when any text, number, search, or password field is focused. It provides full, numeric, password, and search layouts depending on the input type."
 }

@@ -31,9 +31,10 @@ const Layout: React.FC = () => {
         .layout-root {
           display: flex;
           flex-direction: column;
-          height: 100vh;
+          height: calc(100vh - var(--vk-offset, 0px));
           font-family: 'Nunito', sans-serif;
           background: #edeae0;
+          transition: height 0.15s ease;
         }
 
         .app-container {
@@ -213,7 +214,7 @@ const Layout: React.FC = () => {
 
       <div className="layout-root">
         {!isKioskActive && <TitleBar />}
-        <div className="app-container" style={{ height: isKioskActive ? '100vh' : 'calc(100vh - 44px)' }}>
+        <div className="app-container" style={{ height: isKioskActive ? 'calc(100vh - var(--vk-offset, 0px))' : 'calc(100vh - 44px - var(--vk-offset, 0px))' }}>
           {isAdmin && (
             <aside className="sidebar">
               {/* Brand */}
