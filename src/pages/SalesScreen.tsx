@@ -4,6 +4,8 @@ import { api, Product, Category, SaleItem, formatQtyUnit, priceUnitLabel } from 
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
+import { useCustomerDisplay } from '../contexts/CustomerDisplayContext';
+import type { CustomerDisplayItem } from '../contexts/CustomerDisplayContext';
 
 const SalesScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -26,6 +28,7 @@ const SalesScreen: React.FC = () => {
   const [itemDiscountInput, setItemDiscountInput] = useState('');
   const [itemDiscountType, setItemDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { displayMode, isDisplayOpen, broadcastCartUpdate, broadcastSaleComplete, broadcastIdle } = useCustomerDisplay();
 
   useEffect(() => { loadData(); }, []);
 
@@ -129,6 +132,35 @@ const SalesScreen: React.FC = () => {
     return { rawSubtotal, totalProductDiscount, subtotalAfterProductDiscounts, billDiscount, finalTotal };
   }, [cart, billDiscountValue, billDiscountType]);
 
+  // Broadcast cart state to customer display
+  useEffect(() => {
+    if (displayMode === 'disabled' || !isDisplayOpen) return;
+    const items: CustomerDisplayItem[] = cart.map(item => ({
+      name: item.product.name,
+      quantity: item.quantity,
+      unit: item.product.base_unit,
+      price: item.product.price,
+      discountValue: item.discountValue,
+      discountType: item.discountType,
+    }));
+    if (cart.length === 0) {
+      broadcastIdle(currency, settings?.shop_name || 'NyxoPos', settings?.logo_url || null, settings?.footer_text || null);
+    } else {
+      broadcastCartUpdate({
+        type: 'cart-update',
+        items,
+        rawSubtotal: cartStats.rawSubtotal,
+        totalProductDiscount: cartStats.totalProductDiscount,
+        billDiscount: cartStats.billDiscount,
+        finalTotal: cartStats.finalTotal,
+        currency,
+        shopName: settings?.shop_name || 'NyxoPos',
+        logoUrl: settings?.logo_url || null,
+        footerText: settings?.footer_text || null,
+      });
+    }
+  }, [cart, cartStats, displayMode, isDisplayOpen, currency, settings]);
+
   const change = useMemo(() => Math.max(0, (parseFloat(cashReceived) || 0) - cartStats.finalTotal), [cashReceived, cartStats.finalTotal]);
 
   const handleCompleteSale = async () => {
@@ -147,6 +179,28 @@ const SalesScreen: React.FC = () => {
       const history = await api.getSalesHistory();
       const latest = history[0];
       setShowReceipt({ id: saleId, invoice: latest.invoice_number, items: cartSnapshot, total: statsSnapshot.finalTotal, billDiscount: statsSnapshot.billDiscount, totalProductDiscount: statsSnapshot.totalProductDiscount });
+      // Broadcast sale completion to customer display
+      if (displayMode !== 'disabled' && isDisplayOpen) {
+        broadcastSaleComplete({
+          type: 'sale-complete',
+          items: cartSnapshot.map(item => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            unit: item.product.base_unit,
+            price: item.product.price,
+            discountValue: item.discountValue,
+            discountType: item.discountType,
+          })),
+          rawSubtotal: statsSnapshot.rawSubtotal,
+          totalProductDiscount: statsSnapshot.totalProductDiscount,
+          billDiscount: statsSnapshot.billDiscount,
+          finalTotal: statsSnapshot.finalTotal,
+          currency,
+          shopName: settings?.shop_name || 'NyxoPos',
+          logoUrl: settings?.logo_url || null,
+          footerText: settings?.footer_text || null,
+        });
+      }
       setCart([]); setCashReceived(''); setBillDiscountValue(0); setBillDiscountType('percentage');
       loadData();
     } catch (error) { alertCustom("Failed to complete sale: " + error, "System Error", "error"); }

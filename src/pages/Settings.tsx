@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield, Monitor } from 'lucide-react';
 import { api } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
 import { useKiosk } from '../contexts/KioskContext';
+import { useCustomerDisplay } from '../contexts/CustomerDisplayContext';
+import type { CustomerDisplayMode } from '../contexts/CustomerDisplayContext';
 
 const Settings: React.FC = () => {
   const [shopName, setShopName] = useState('');
@@ -27,6 +29,12 @@ const Settings: React.FC = () => {
   const { notify, alertCustom, confirmCustom } = useNotifications();
   const { t, i18n } = useTranslation();
   const { isKioskActive, enterKiosk } = useKiosk();
+  const {
+    displayMode, setDisplayMode,
+    selectedMonitorIndex, setSelectedMonitorIndex,
+    monitors, refreshMonitors,
+    isDisplayOpen, openCustomerDisplay, closeCustomerDisplay,
+  } = useCustomerDisplay();
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;
@@ -645,6 +653,100 @@ const Settings: React.FC = () => {
                     </div>
                   </div>
                 </>
+              )}
+            </div>
+
+            {/* Customer Display card */}
+            <div className="st-card">
+              <h2 className="st-card-title">
+                <Monitor size={17} color="#2d5a3d" /> {t('cd_customer_display')}
+              </h2>
+              <p style={{ color: '#7a9e8a', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                {t('cd_description')}
+              </p>
+
+              <div className="st-form-group">
+                <label className="st-label">{t('cd_display_mode')}</label>
+                <select
+                  className="st-input"
+                  value={displayMode}
+                  onChange={e => setDisplayMode(e.target.value as CustomerDisplayMode)}
+                >
+                  <option value="disabled">{t('cd_disabled')}</option>
+                  <option value="auto">{t('cd_auto_detect')}</option>
+                  <option value="manual">{t('cd_select_screen')}</option>
+                </select>
+              </div>
+
+              {displayMode === 'manual' && (
+                <div className="st-form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                    <label className="st-label" style={{ margin: 0 }}>{t('cd_select_monitor')}</label>
+                    <button
+                      type="button"
+                      onClick={refreshMonitors}
+                      style={{
+                        background: 'none', border: 'none', color: '#2d5a3d', cursor: 'pointer',
+                        fontSize: '0.72rem', fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                        display: 'flex', alignItems: 'center', gap: '0.3rem'
+                      }}
+                    >
+                      <RefreshCw size={12} /> {t('cd_refresh')}
+                    </button>
+                  </div>
+                  <select
+                    className="st-input"
+                    value={selectedMonitorIndex}
+                    onChange={e => setSelectedMonitorIndex(parseInt(e.target.value))}
+                  >
+                    {monitors.map((m, idx) => (
+                      <option key={idx} value={idx}>
+                        {m.name || `Monitor ${idx + 1}`} ({m.size.width}×{m.size.height})
+                      </option>
+                    ))}
+                    {monitors.length === 0 && (
+                      <option value={0}>{t('cd_no_monitors')}</option>
+                    )}
+                  </select>
+                  <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem' }}>
+                    {t('cd_monitors_detected', { count: monitors.length })}
+                  </span>
+                </div>
+              )}
+
+              {displayMode !== 'disabled' && (
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  {!isDisplayOpen ? (
+                    <button
+                      type="button"
+                      className="st-save-btn"
+                      style={{ background: '#2d5a3d' }}
+                      onClick={openCustomerDisplay}
+                    >
+                      <Monitor size={16} /> {t('cd_open_display')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="st-save-btn"
+                      style={{ background: '#c05050', boxShadow: '0 3px 10px rgba(192,80,80,0.25)' }}
+                      onClick={closeCustomerDisplay}
+                    >
+                      <X size={16} /> {t('cd_close_display')}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isDisplayOpen && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#e6ede8', borderRadius: '0.625rem', border: '1.5px solid #c8ddd0' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2d5a3d', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                    {t('cd_status')}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#2d5a3d', lineHeight: 1.6, fontWeight: 600 }}>
+                    ✓ {t('cd_active_message')}
+                  </div>
+                </div>
               )}
             </div>
           </div>

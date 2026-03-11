@@ -220,6 +220,46 @@ export interface PurchaseInvoiceSummary {
   payment_status: string;
 }
 
+// Revenue report interfaces
+export interface RevenueByPeriod {
+  period: string;
+  total_sales: number;
+  total_cogs: number;
+  total_discounts: number;
+  total_purchase_tax: number;
+  net_profit: number;
+  sale_count: number;
+}
+
+export interface ProductProfit {
+  product_name: string;
+  category_name: string;
+  qty_sold: number;
+  selling_revenue: number;
+  purchase_cost: number;
+  profit: number;
+}
+
+export interface CategoryProfit {
+  category_name: string;
+  total_sales: number;
+  total_cost: number;
+  profit: number;
+  product_count: number;
+}
+
+export interface RevenueSummary {
+  total_sales: number;
+  total_cogs: number;
+  total_discounts: number;
+  total_expenses: number;
+  gross_profit: number;
+  net_profit: number;
+  profit_margin: number;
+  sale_count: number;
+  purchase_count: number;
+}
+
 export const api = {
   // Categories
   getCategories: () => invoke<Category[]>("get_categories"),
@@ -379,6 +419,16 @@ export const api = {
     invoke<PurchaseInvoiceWithItems>("get_purchase_invoice_details", { invoiceId }),
   updatePurchaseInvoiceStatus: (invoiceId: number, paymentStatus: string) =>
     invoke<void>("update_purchase_invoice_status", { invoiceId, paymentStatus }),
+
+  // --- Revenue Reports ---
+  getRevenueSummary: (startDate?: string, endDate?: string) =>
+    invoke<RevenueSummary>("get_revenue_summary", { startDate, endDate }),
+  getRevenueByPeriod: (startDate?: string, endDate?: string, groupBy: string = 'day') =>
+    invoke<RevenueByPeriod[]>("get_revenue_by_period", { startDate, endDate, groupBy }),
+  getProductProfit: (startDate?: string, endDate?: string) =>
+    invoke<ProductProfit[]>("get_product_profit", { startDate, endDate }),
+  getCategoryProfit: (startDate?: string, endDate?: string) =>
+    invoke<CategoryProfit[]>("get_category_profit", { startDate, endDate }),
 };
 
 // Helper: format a quantity with its unit for display

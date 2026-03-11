@@ -5,6 +5,7 @@ use crate::models::{
     StockReport, ExpiryReport, CategoryStockValue,
     SupplierWithStats, PurchaseInvoice, PurchaseInvoiceItem,
     PurchaseInvoiceWithItems, PurchaseInvoiceItemDetailed, PurchaseInvoiceSummary,
+    RevenueByPeriod, ProductProfit, CategoryProfit, RevenueSummary,
 };
 use rusqlite::params;
 use tauri::State;
@@ -1269,4 +1270,245 @@ pub fn update_purchase_invoice_status(
         params![payment_status, invoice_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ── Revenue / Profit report commands ──
+
+#[tauri::command]
+pub fn get_revenue_summary(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<RevenueSummary, String> {
+    let conn = state.0.lock().unwrap();
+
+    // Sales totals
+    let mut sales_q = "SELECT COALESCE(SUM(total), 0), COALESCE(SUM(bill_discount_value + total_product_discount), 0), COUNT(*) FROM sales".to_string();
+    let mut pv: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        sales_q.push_str(" WHERE date >= ? AND date <= ?");
+        pv.push(format!("{} 00:00:00", s));
+        pv.push(format!("{} 23:59:59", e));
+    }
+    let (total_sales, total_discounts, sale_count): (f64, f64, i64) = conn.query_row(
+        &sales_q, rusqlite::params_from_iter(pv.iter()), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    ).map_err(|e| e.to_string())?;
+
+    // COGS: average purchase price * quantity sold for items in period
+    let mut cogs_q = "SELECT COALESCE(SUM(si.quantity * COALESCE(
+        (SELECT AVG(pii.purchase_price) FROM purchase_invoice_items pii WHERE pii.product_id = si.product_id), 0
+    )), 0) FROM sale_items si JOIN sales s ON si.sale_id = s.id".to_string();
+    let mut pv2: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        cogs_q.push_str(" WHERE s.date >= ? AND s.date <= ?");
+        pv2.push(format!("{} 00:00:00", s));
+        pv2.push(format!("{} 23:59:59", e));
+    }
+    let total_cogs: f64 = conn.query_row(
+        &cogs_q, rusqlite::params_from_iter(pv2.iter()), |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+
+    // Total purchase expenses in period
+    let mut exp_q = "SELECT COALESCE(SUM(grand_total), 0), COUNT(*) FROM purchase_invoices".to_string();
+    let mut pv3: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        exp_q.push_str(" WHERE date >= ? AND date <= ?");
+        pv3.push(s.clone());
+        pv3.push(e.clone());
+    }
+    let (total_expenses, purchase_count): (f64, i64) = conn.query_row(
+        &exp_q, rusqlite::params_from_iter(pv3.iter()), |row| Ok((row.get(0)?, row.get(1)?))
+    ).map_err(|e| e.to_string())?;
+
+    let gross_profit = total_sales - total_cogs;
+    let net_profit = total_sales - total_cogs - total_discounts;
+    let profit_margin = if total_sales > 0.0 { (net_profit / total_sales) * 100.0 } else { 0.0 };
+
+    Ok(RevenueSummary {
+        total_sales,
+        total_cogs,
+        total_discounts,
+        total_expenses,
+        gross_profit,
+        net_profit,
+        profit_margin,
+        sale_count,
+        purchase_count,
+    })
+}
+
+#[tauri::command]
+pub fn get_revenue_by_period(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    group_by: String,
+) -> Result<Vec<RevenueByPeriod>, String> {
+    let conn = state.0.lock().unwrap();
+
+    let date_fmt = match group_by.as_str() {
+        "week" => "strftime('%Y-W%W', date)",
+        "month" => "strftime('%Y-%m', date)",
+        _ => "date(date)",
+    };
+
+    // Sales data by period
+    let mut sales_q = format!(
+        "SELECT {fmt} as period, COALESCE(SUM(total), 0), COALESCE(SUM(bill_discount_value + total_product_discount), 0), COUNT(*)
+         FROM sales", fmt = date_fmt
+    );
+    let mut pv: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        sales_q.push_str(" WHERE date >= ? AND date <= ?");
+        pv.push(format!("{} 00:00:00", s));
+        pv.push(format!("{} 23:59:59", e));
+    }
+    sales_q.push_str(&format!(" GROUP BY {fmt} ORDER BY period ASC", fmt = date_fmt));
+
+    let mut stmt = conn.prepare(&sales_q).map_err(|e| e.to_string())?;
+    let sales_rows: Vec<(String, f64, f64, i64)> = stmt.query_map(
+        rusqlite::params_from_iter(pv.iter()), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+    ).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    // Purchase expenses by period
+    let pur_date_fmt = match group_by.as_str() {
+        "week" => "strftime('%Y-W%W', date)",
+        "month" => "strftime('%Y-%m', date)",
+        _ => "date(date)",
+    };
+    let mut pur_q = format!(
+        "SELECT {fmt} as period, COALESCE(SUM(grand_total), 0), COALESCE(SUM(tax), 0)
+         FROM purchase_invoices", fmt = pur_date_fmt
+    );
+    let mut pv2: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        pur_q.push_str(" WHERE date >= ? AND date <= ?");
+        pv2.push(s.clone());
+        pv2.push(e.clone());
+    }
+    pur_q.push_str(&format!(" GROUP BY {fmt}", fmt = pur_date_fmt));
+
+    let mut stmt2 = conn.prepare(&pur_q).map_err(|e| e.to_string())?;
+    let pur_rows: Vec<(String, f64, f64)> = stmt2.query_map(
+        rusqlite::params_from_iter(pv2.iter()), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    ).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    // Merge by period
+    let mut result: Vec<RevenueByPeriod> = Vec::new();
+    for (period, total_sales, total_discounts, sale_count) in &sales_rows {
+        let (cogs, ptax) = pur_rows.iter()
+            .find(|(p, _, _)| p == period)
+            .map(|(_, c, t)| (*c, *t))
+            .unwrap_or((0.0, 0.0));
+        result.push(RevenueByPeriod {
+            period: period.clone(),
+            total_sales: *total_sales,
+            total_cogs: cogs,
+            total_discounts: *total_discounts,
+            total_purchase_tax: ptax,
+            net_profit: *total_sales - cogs - *total_discounts,
+            sale_count: *sale_count,
+        });
+    }
+    // Add periods that only have purchases
+    for (period, cogs, ptax) in &pur_rows {
+        if !result.iter().any(|r| &r.period == period) {
+            result.push(RevenueByPeriod {
+                period: period.clone(),
+                total_sales: 0.0,
+                total_cogs: *cogs,
+                total_discounts: 0.0,
+                total_purchase_tax: *ptax,
+                net_profit: -*cogs,
+                sale_count: 0,
+            });
+        }
+    }
+    result.sort_by(|a, b| a.period.cmp(&b.period));
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn get_product_profit(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<Vec<ProductProfit>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut query = "SELECT p.name, COALESCE(c.name, 'Uncategorized'),
+        COALESCE(SUM(si.quantity), 0),
+        COALESCE(SUM(si.subtotal), 0),
+        COALESCE(SUM(si.quantity * COALESCE(
+            (SELECT AVG(pii.purchase_price) FROM purchase_invoice_items pii WHERE pii.product_id = si.product_id), 0
+        )), 0)
+     FROM sale_items si
+     JOIN products p ON si.product_id = p.id
+     JOIN sales s ON si.sale_id = s.id
+     LEFT JOIN categories c ON p.category_id = c.id".to_string();
+    let mut pv: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE s.date >= ? AND s.date <= ?");
+        pv.push(format!("{} 00:00:00", s));
+        pv.push(format!("{} 23:59:59", e));
+    }
+    query.push_str(" GROUP BY p.id ORDER BY 4 DESC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(pv.iter()), |row| {
+        let revenue: f64 = row.get(3)?;
+        let cost: f64 = row.get(4)?;
+        Ok(ProductProfit {
+            product_name: row.get(0)?,
+            category_name: row.get(1)?,
+            qty_sold: row.get(2)?,
+            selling_revenue: revenue,
+            purchase_cost: cost,
+            profit: revenue - cost,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn get_category_profit(
+    state: State<DbState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<Vec<CategoryProfit>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut query = "SELECT COALESCE(c.name, 'Uncategorized'),
+        COALESCE(SUM(si.subtotal), 0),
+        COALESCE(SUM(si.quantity * COALESCE(
+            (SELECT AVG(pii.purchase_price) FROM purchase_invoice_items pii WHERE pii.product_id = si.product_id), 0
+        )), 0),
+        COUNT(DISTINCT p.id)
+     FROM sale_items si
+     JOIN products p ON si.product_id = p.id
+     JOIN sales s ON si.sale_id = s.id
+     LEFT JOIN categories c ON p.category_id = c.id".to_string();
+    let mut pv: Vec<String> = Vec::new();
+    if let (Some(s), Some(e)) = (&start_date, &end_date) {
+        query.push_str(" WHERE s.date >= ? AND s.date <= ?");
+        pv.push(format!("{} 00:00:00", s));
+        pv.push(format!("{} 23:59:59", e));
+    }
+    query.push_str(" GROUP BY COALESCE(c.name, 'Uncategorized') ORDER BY 2 DESC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(pv.iter()), |row| {
+        let sales: f64 = row.get(1)?;
+        let cost: f64 = row.get(2)?;
+        Ok(CategoryProfit {
+            category_name: row.get(0)?,
+            total_sales: sales,
+            total_cost: cost,
+            profit: sales - cost,
+            product_count: row.get(3)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(rows)
 }

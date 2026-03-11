@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { KioskProvider, useKiosk } from './contexts/KioskContext';
+import { CustomerDisplayProvider } from './contexts/CustomerDisplayContext';
 import Layout from './components/Layout';
 import TitleBar from './components/TitleBar';
 import KioskExitDialog from './components/KioskExitDialog';
@@ -20,6 +21,7 @@ import LoginScreen from './pages/LoginScreen';
 import ChangePasswordScreen from './pages/ChangePasswordScreen';
 import SupplierList from './pages/SupplierList';
 import PurchaseInvoices from './pages/PurchaseInvoices';
+import CustomerDisplay from './pages/CustomerDisplay';
 
 // Guard: must be logged in
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,6 +43,12 @@ const AppRouter: React.FC = () => {
   const { currentUser } = useAuth();
   const { isKioskActive } = useKiosk();
   const [changePwdState, setChangePwdState] = useState<{ username: string } | null>(null);
+
+  // Check if this is the customer display window
+  const isCustomerDisplayWindow = window.location.pathname === '/customer-display';
+  if (isCustomerDisplayWindow) {
+    return <CustomerDisplay />;
+  }
 
   // Reset change password state when user logs out or session changes
   React.useEffect(() => {
@@ -103,9 +111,11 @@ function App() {
     <AuthProvider>
       <NotificationProvider>
         <SettingsProvider>
-          <KioskProvider>
-            <AppRouter />
-          </KioskProvider>
+          <CustomerDisplayProvider>
+            <KioskProvider>
+              <AppRouter />
+            </KioskProvider>
+          </CustomerDisplayProvider>
         </SettingsProvider>
       </NotificationProvider>
     </AuthProvider>

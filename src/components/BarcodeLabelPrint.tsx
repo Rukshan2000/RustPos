@@ -5,6 +5,8 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTranslation } from 'react-i18next';
 import { LABEL_SIZES, LabelSize, renderBarcodeToCanvas, generateLabelsHTML, LabelData } from '../utils/barcode';
 import jsPDF from 'jspdf';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeFile } from '@tauri-apps/plugin-fs';
 
 interface BarcodeLabelPrintProps {
   products: { product: Product; quantity: number }[];
@@ -44,7 +46,7 @@ const BarcodeLabelPrint: React.FC<BarcodeLabelPrintProps> = ({ products, onClose
     }
   };
 
-  const handleExportPDF = useCallback(() => {
+  const handleExportPDF = useCallback(async () => {
     const pdf = new jsPDF({
       orientation: labelSize.width > labelSize.height ? 'landscape' : 'portrait',
       unit: 'mm',
@@ -95,7 +97,9 @@ const BarcodeLabelPrint: React.FC<BarcodeLabelPrintProps> = ({ products, onClose
       }
     }
 
-    pdf.save('barcode-labels.pdf');
+    const pdfBytes = pdf.output('arraybuffer');
+    const filePath = await save({ defaultPath: 'barcode-labels.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (filePath) await writeFile(filePath, new Uint8Array(pdfBytes));
   }, [labelData, labelSize, showPrice]);
 
   return (

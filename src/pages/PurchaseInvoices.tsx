@@ -5,6 +5,8 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTranslation } from 'react-i18next';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeFile } from '@tauri-apps/plugin-fs';
 
 interface InvoiceItemRow {
   product_id: number;
@@ -142,7 +144,7 @@ const PurchaseInvoices: React.FC = () => {
     try { await api.updatePurchaseInvoiceStatus(id, status); loadInvoices(); } catch (e: any) { alert(e); }
   };
 
-  const exportPDF = (detail: PurchaseInvoiceWithItems) => {
+  const exportPDF = async (detail: PurchaseInvoiceWithItems) => {
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text(t('sup_purchase_invoice'), 14, 20);
@@ -171,7 +173,9 @@ const PurchaseInvoices: React.FC = () => {
     doc.setFontSize(12);
     doc.text(`${t('sup_grand_total')}: ${currency}${detail.invoice.grand_total.toFixed(2)}`, 140, finalY + 30);
 
-    doc.save(`${detail.invoice.invoice_number}.pdf`);
+    const pdfBytes = doc.output('arraybuffer');
+    const filePath = await save({ defaultPath: `${detail.invoice.invoice_number}.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (filePath) await writeFile(filePath, new Uint8Array(pdfBytes));
   };
 
   const statusBadge = (status: string) => {

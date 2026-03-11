@@ -6,18 +6,21 @@ import {
 import {
   api, Sale,
   SalesByPeriod, PaymentMethodSummary, TopProduct, CategorySales, HourlySales,
-  StockReport, ExpiryReport, CategoryStockValue
+  StockReport, ExpiryReport, CategoryStockValue,
+  RevenueSummary, RevenueByPeriod, ProductProfit, CategoryProfit
 } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend
+  PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart
 } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
-type TabKey = 'sales' | 'inventory' | 'financial';
+type TabKey = 'sales' | 'inventory' | 'financial' | 'revenue';
 
 const COLORS = ['#2d5a3d', '#4a8f6a', '#7bc4a0', '#b8e0cc', '#c05050', '#e8a87c', '#d4a574', '#89b0ae', '#6a8d92', '#b5c7a3'];
 
@@ -41,6 +44,12 @@ const Reports: React.FC = () => {
   const [stockReport, setStockReport] = useState<StockReport[]>([]);
   const [expiryReport, setExpiryReport] = useState<ExpiryReport[]>([]);
   const [categoryStockValue, setCategoryStockValue] = useState<CategoryStockValue[]>([]);
+
+  // Revenue data
+  const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(null);
+  const [revenueByPeriod, setRevenueByPeriod] = useState<RevenueByPeriod[]>([]);
+  const [productProfit, setProductProfit] = useState<ProductProfit[]>([]);
+  const [categoryProfit, setCategoryProfit] = useState<CategoryProfit[]>([]);
 
   const loadSalesData = useCallback(async () => {
     try {
@@ -76,10 +85,28 @@ const Reports: React.FC = () => {
     } catch (e) { console.error(e); }
   }, []);
 
+  const loadRevenueData = useCallback(async () => {
+    try {
+      const sd = startDate || undefined;
+      const ed = endDate || undefined;
+      const [rs, rbp, pp, cp] = await Promise.all([
+        api.getRevenueSummary(sd, ed),
+        api.getRevenueByPeriod(sd, ed, groupBy),
+        api.getProductProfit(sd, ed),
+        api.getCategoryProfit(sd, ed),
+      ]);
+      setRevenueSummary(rs);
+      setRevenueByPeriod(rbp);
+      setProductProfit(pp);
+      setCategoryProfit(cp);
+    } catch (e) { console.error(e); }
+  }, [startDate, endDate, groupBy]);
+
   useEffect(() => {
     if (activeTab === 'sales' || activeTab === 'financial') loadSalesData();
     if (activeTab === 'inventory') loadInventoryData();
-  }, [activeTab, loadSalesData, loadInventoryData]);
+    if (activeTab === 'revenue') loadRevenueData();
+  }, [activeTab, loadSalesData, loadInventoryData, loadRevenueData]);
 
   // Computed stats
   const totalRevenue = sales.reduce((a, s) => a + s.total, 0);
@@ -90,20 +117,13 @@ const Reports: React.FC = () => {
   const outOfStockCount = stockReport.filter(s => s.status === 'out_of_stock').length;
 
   // Export helpers
-  const exportCSV = (headers: string[], rows: string[][], filename: string) => {
+  const exportCSV = async (headers: string[], rows: string[][], filename: string) => {
     const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const filePath = await save({ defaultPath: filename, filters: [{ name: 'CSV', extensions: ['csv'] }] });
+    if (filePath) await writeTextFile(filePath, csvContent);
   };
 
-  const exportPDF = (title: string, headers: string[], rows: string[][]) => {
+  const exportPDF = async (title: string, headers: string[], rows: string[][]) => {
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text(title, 14, 20);
@@ -116,7 +136,9 @@ const Reports: React.FC = () => {
       styles: { fontSize: 8 },
       headStyles: { fillColor: [45, 90, 61] },
     });
-    doc.save(`${title.replace(/\s+/g, '_')}.pdf`);
+    const pdfBytes = doc.output('arraybuffer');
+    const filePath = await save({ defaultPath: `${title.replace(/\s+/g, '_')}.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (filePath) await writeFile(filePath, new Uint8Array(pdfBytes));
   };
 
   const handleExport = (format: 'csv' | 'pdf') => {
@@ -136,6 +158,14 @@ const Reports: React.FC = () => {
       ]);
       if (format === 'csv') exportCSV(headers, rows, 'inventory_report.csv');
       else exportPDF(t('rpt_inventory_report'), headers, rows);
+    } else if (activeTab === 'revenue') {
+      const headers = [t('product_header'), t('category'), t('quantity'), t('rev_revenue'), t('rev_cogs'), t('rev_profit')];
+      const rows = productProfit.map(p => [
+        p.product_name, p.category_name, p.qty_sold.toString(), p.selling_revenue.toFixed(2),
+        p.purchase_cost.toFixed(2), p.profit.toFixed(2)
+      ]);
+      if (format === 'csv') exportCSV(headers, rows, `revenue_report_${startDate || 'all'}_to_${endDate || 'all'}.csv`);
+      else exportPDF(t('rev_revenue_report'), headers, rows);
     } else {
       const headers = [t('rpt_period'), t('total_revenue'), t('total_discounts'), t('rpt_net_revenue'), t('transactions')];
       const rows = salesByPeriod.map(s => [
@@ -162,6 +192,7 @@ const Reports: React.FC = () => {
     { key: 'sales', icon: <BarChart3 size={16} />, label: t('rpt_sales') },
     { key: 'inventory', icon: <Package size={16} />, label: t('inventory') },
     { key: 'financial', icon: <DollarSign size={16} />, label: t('rpt_financial') },
+    { key: 'revenue', icon: <TrendingUp size={16} />, label: t('rev_revenue') },
   ];
 
   // Custom tooltip
@@ -299,7 +330,7 @@ const Reports: React.FC = () => {
             <span style={{ color: '#b0a898', fontWeight: 600, fontSize: '0.8rem' }}>{t('to')}</span>
             <input type="date" className="rp-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
-          {(activeTab === 'sales' || activeTab === 'financial') && (
+          {(activeTab === 'sales' || activeTab === 'financial' || activeTab === 'revenue') && (
             <div className="rp-filter-group">
               <span className="rp-filter-label">{t('rpt_group_by')}:</span>
               <select className="rp-input rp-select" value={groupBy} onChange={e => setGroupBy(e.target.value)}>
@@ -730,6 +761,223 @@ const Reports: React.FC = () => {
                       <td style={{ fontWeight: 700 }}>{s.stock}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#2d5a3d' }}>
                         {currency}{s.value.toFixed(2)}
+                      </td>
+                    </tr>
+                  )) : <tr><td colSpan={5} className="rp-empty">{t('rpt_no_data')}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* ═══════ REVENUE TAB ═══════ */}
+        {activeTab === 'revenue' && (
+          <>
+            {/* Summary Stats */}
+            {revenueSummary && (
+              <div className="rp-stats-grid">
+                <div className="rp-stat-card" style={{ borderLeftColor: '#2d5a3d' }}>
+                  <div className="rp-stat-label">{t('rev_total_sales')}</div>
+                  <div className="rp-stat-value rp-stat-green">{currency}{revenueSummary.total_sales.toFixed(2)}</div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: '#c05050' }}>
+                  <div className="rp-stat-label">{t('rev_cogs')}</div>
+                  <div className="rp-stat-value rp-stat-red">{currency}{revenueSummary.total_cogs.toFixed(2)}</div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: '#d4a030' }}>
+                  <div className="rp-stat-label">{t('total_discounts')}</div>
+                  <div className="rp-stat-value rp-stat-orange">{currency}{revenueSummary.total_discounts.toFixed(2)}</div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: revenueSummary.net_profit >= 0 ? '#2d5a3d' : '#c05050' }}>
+                  <div className="rp-stat-label">{t('rev_net_profit')}</div>
+                  <div className="rp-stat-value" style={{ color: revenueSummary.net_profit >= 0 ? '#2d5a3d' : '#c05050' }}>
+                    {currency}{revenueSummary.net_profit.toFixed(2)}
+                  </div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: '#4a8f6a' }}>
+                  <div className="rp-stat-label">{t('rev_gross_profit')}</div>
+                  <div className="rp-stat-value rp-stat-green">{currency}{revenueSummary.gross_profit.toFixed(2)}</div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: '#ddd8cc' }}>
+                  <div className="rp-stat-label">{t('rev_profit_margin')}</div>
+                  <div className="rp-stat-value">{revenueSummary.profit_margin.toFixed(1)}%</div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: '#89b0ae' }}>
+                  <div className="rp-stat-label">{t('rev_supplier_expenses')}</div>
+                  <div className="rp-stat-value" style={{ color: '#c05050' }}>{currency}{revenueSummary.total_expenses.toFixed(2)}</div>
+                </div>
+                <div className="rp-stat-card" style={{ borderLeftColor: '#ddd8cc' }}>
+                  <div className="rp-stat-label">{t('rev_orders')}</div>
+                  <div className="rp-stat-value">{revenueSummary.sale_count} / {revenueSummary.purchase_count}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Revenue vs Expenses Chart + Profit Trend */}
+            <div className="rp-charts-grid">
+              <div className="rp-chart-card rp-chart-full">
+                <div className="rp-chart-title"><TrendingUp size={16} color="#2d5a3d" /> {t('rev_revenue_vs_expenses')}</div>
+                {revenueByPeriod.length ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={revenueByPeriod} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ddd8cc" />
+                      <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#7a9e8a' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#7a9e8a' }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                      <Bar dataKey="total_sales" name={t('rev_total_sales')} fill="#2d5a3d" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="total_cogs" name={t('rev_cogs')} fill="#c05050" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="total_discounts" name={t('total_discounts')} fill="#d4a030" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="rp-empty">{t('rpt_no_data')}</div>}
+              </div>
+
+              <div className="rp-chart-card rp-chart-full">
+                <div className="rp-chart-title"><DollarSign size={16} color="#2d5a3d" /> {t('rev_profit_trend')}</div>
+                {revenueByPeriod.length ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={revenueByPeriod} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#2d5a3d" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#2d5a3d" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ddd8cc" />
+                      <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#7a9e8a' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#7a9e8a' }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey="net_profit" name={t('rev_net_profit')} stroke="#2d5a3d" fill="url(#profitGrad)" strokeWidth={2.5} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : <div className="rp-empty">{t('rpt_no_data')}</div>}
+              </div>
+
+              {/* Top Profitable Products Chart */}
+              <div className="rp-chart-card">
+                <div className="rp-chart-title"><BarChart3 size={16} color="#2d5a3d" /> {t('rev_top_profitable')}</div>
+                {productProfit.filter(p => p.profit > 0).length ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={productProfit.filter(p => p.profit > 0).slice(0, 10)} layout="vertical" margin={{ left: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ddd8cc" />
+                      <XAxis type="number" tick={{ fontSize: 11, fill: '#7a9e8a' }} />
+                      <YAxis type="category" dataKey="product_name" width={120} tick={{ fontSize: 10, fill: '#7a9e8a' }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="profit" name={t('rev_profit')} fill="#4a8f6a" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="rp-empty">{t('rpt_no_data')}</div>}
+              </div>
+
+              {/* Category Profit Pie */}
+              <div className="rp-chart-card">
+                <div className="rp-chart-title"><Package size={16} color="#2d5a3d" /> {t('rev_category_profit')}</div>
+                {categoryProfit.filter(c => c.profit > 0).length ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={categoryProfit.filter(c => c.profit > 0)}
+                        dataKey="profit"
+                        nameKey="category_name"
+                        cx="50%" cy="50%"
+                        outerRadius={95}
+                        label={(props: any) => `${props.category_name} ${((props.percent || 0) * 100).toFixed(0)}%`}
+                        labelLine={true}
+                      >
+                        {categoryProfit.filter(c => c.profit > 0).map((_, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <div className="rp-empty">{t('rpt_no_data')}</div>}
+              </div>
+            </div>
+
+            {/* Revenue by Period Table */}
+            <div className="rp-table-card">
+              <div className="rp-table-header">
+                <TrendingUp size={16} color="#2d5a3d" /> {t('rev_period_breakdown')}
+              </div>
+              <table className="rp-table">
+                <thead><tr>
+                  <th>{t('rpt_period')}</th>
+                  <th>{t('rev_total_sales')}</th>
+                  <th>{t('rev_cogs')}</th>
+                  <th>{t('total_discounts')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('rev_net_profit')}</th>
+                </tr></thead>
+                <tbody>
+                  {revenueByPeriod.length ? revenueByPeriod.map((r, i) => (
+                    <tr key={i}>
+                      <td className="rp-product-name">{r.period}</td>
+                      <td>{currency}{r.total_sales.toFixed(2)}</td>
+                      <td style={{ color: '#c05050' }}>{currency}{r.total_cogs.toFixed(2)}</td>
+                      <td style={{ color: '#d4a030' }}>{currency}{r.total_discounts.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: r.net_profit >= 0 ? '#2d5a3d' : '#c05050' }}>
+                        {currency}{r.net_profit.toFixed(2)}
+                      </td>
+                    </tr>
+                  )) : <tr><td colSpan={5} className="rp-empty">{t('rpt_no_data')}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Product Profit Table */}
+            <div className="rp-table-card">
+              <div className="rp-table-header">
+                <Package size={16} color="#2d5a3d" /> {t('rev_product_profit')}
+              </div>
+              <table className="rp-table">
+                <thead><tr>
+                  <th>{t('product_header')}</th>
+                  <th>{t('category')}</th>
+                  <th>{t('quantity')}</th>
+                  <th>{t('rev_revenue')}</th>
+                  <th>{t('rev_cost')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('rev_profit')}</th>
+                </tr></thead>
+                <tbody>
+                  {productProfit.length ? productProfit.map((p, i) => (
+                    <tr key={i}>
+                      <td className="rp-product-name">{p.product_name}</td>
+                      <td>{p.category_name}</td>
+                      <td>{p.qty_sold % 1 === 0 ? p.qty_sold.toFixed(0) : p.qty_sold.toFixed(2)}</td>
+                      <td>{currency}{p.selling_revenue.toFixed(2)}</td>
+                      <td style={{ color: '#c05050' }}>{currency}{p.purchase_cost.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: p.profit >= 0 ? '#2d5a3d' : '#c05050' }}>
+                        {currency}{p.profit.toFixed(2)}
+                      </td>
+                    </tr>
+                  )) : <tr><td colSpan={6} className="rp-empty">{t('rpt_no_data')}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Category Profit Table */}
+            <div className="rp-table-card">
+              <div className="rp-table-header">
+                <BarChart3 size={16} color="#2d5a3d" /> {t('rev_category_profit')}
+              </div>
+              <table className="rp-table">
+                <thead><tr>
+                  <th>{t('category')}</th>
+                  <th>{t('products')}</th>
+                  <th>{t('rev_total_sales')}</th>
+                  <th>{t('rev_cost')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('rev_profit')}</th>
+                </tr></thead>
+                <tbody>
+                  {categoryProfit.length ? categoryProfit.map((c, i) => (
+                    <tr key={i}>
+                      <td className="rp-product-name">{c.category_name}</td>
+                      <td>{c.product_count}</td>
+                      <td>{currency}{c.total_sales.toFixed(2)}</td>
+                      <td style={{ color: '#c05050' }}>{currency}{c.total_cost.toFixed(2)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: c.profit >= 0 ? '#2d5a3d' : '#c05050' }}>
+                        {currency}{c.profit.toFixed(2)}
                       </td>
                     </tr>
                   )) : <tr><td colSpan={5} className="rp-empty">{t('rpt_no_data')}</td></tr>}

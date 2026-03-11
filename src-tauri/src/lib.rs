@@ -11,6 +11,8 @@ use crate::commands::*;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let conn = init_db(app.handle()).expect("failed to initialize database");
             app.manage(DbState(Mutex::new(conn)));
@@ -61,7 +63,11 @@ pub fn run() {
             create_purchase_invoice,
             get_purchase_invoices,
             get_purchase_invoice_details,
-            update_purchase_invoice_status
+            update_purchase_invoice_status,
+            get_revenue_summary,
+            get_revenue_by_period,
+            get_product_profit,
+            get_category_profit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

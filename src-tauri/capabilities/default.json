@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": ["main", "customer-display"],
   "permissions": [
     "core:default",
     "opener:default",
@@ -18,6 +18,20 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-closable",
     "core:window:allow-is-fullscreen",
-    "core:window:allow-set-decorations"
+    "core:window:allow-set-decorations",
+    "core:window:allow-create",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-available-monitors",
+    "core:window:allow-current-monitor",
+    "core:window:allow-set-skip-taskbar",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-destroy",
+    "core:webview:allow-create-webview",
+    "dialog:default",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file"
   ]
 }

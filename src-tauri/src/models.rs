@@ -251,3 +251,48 @@ pub struct PurchaseInvoiceSummary {
     pub grand_total: f64,
     pub payment_status: String,
 }
+
+// ── Revenue / Profit report models ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RevenueByPeriod {
+    pub period: String,
+    pub total_sales: f64,
+    pub total_cogs: f64,
+    pub total_discounts: f64,
+    pub total_purchase_tax: f64,
+    pub net_profit: f64,
+    pub sale_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProductProfit {
+    pub product_name: String,
+    pub category_name: String,
+    pub qty_sold: f64,
+    pub selling_revenue: f64,
+    pub purchase_cost: f64,
+    pub profit: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CategoryProfit {
+    pub category_name: String,
+    pub total_sales: f64,
+    pub total_cost: f64,
+    pub profit: f64,
+    pub product_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RevenueSummary {
+    pub total_sales: f64,
+    pub total_cogs: f64,
+    pub total_discounts: f64,
+    pub total_expenses: f64,
+    pub gross_profit: f64,
+    pub net_profit: f64,
+    pub profit_margin: f64,
+    pub sale_count: i64,
+    pub purchase_count: i64,
+}
