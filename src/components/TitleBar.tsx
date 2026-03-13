@@ -163,7 +163,7 @@ const TitleBar: React.FC = () => {
           <div className="tb-logo-icon">
             <ShoppingBag size={14} color="#a8d4b8" />
           </div>
-          <span className="tb-name">NyxoPos</span>
+          <span className="tb-name">SmartPos</span>
           {currentUser && (
             <span className="tb-user-badge">
               {currentUser.username} · {currentUser.role}

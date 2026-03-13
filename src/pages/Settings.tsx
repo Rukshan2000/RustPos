@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield, Monitor, Keyboard } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Database, Download, RefreshCw, ImageIcon, X, Trash2, Globe, Shield, Monitor, Keyboard, Printer } from 'lucide-react';
 import { api } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -26,6 +26,9 @@ const Settings: React.FC = () => {
   const [kioskPin, setKioskPin] = useState('');
   const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(5);
   const [autoStartKiosk, setAutoStartKiosk] = useState(false);
+  const [printerName, setPrinterName] = useState('');
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
+  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
   const { refreshSettings } = useSettings();
   const { notify, alertCustom, confirmCustom } = useNotifications();
   const { t, i18n } = useTranslation();
@@ -55,6 +58,7 @@ const Settings: React.FC = () => {
       setFontSizeFooter(s.font_size_footer); setCurrency(s.currency);
       setKioskEnabled(s.kiosk_enabled); setKioskPin(s.kiosk_pin || '');
       setIdleTimeoutMinutes(s.idle_timeout_minutes); setAutoStartKiosk(s.auto_start_kiosk);
+      setPrinterName(s.printer_name || ''); setAutoPrintReceipt(s.auto_print_receipt);
     } catch (e) { console.error(e); }
   };
 
@@ -62,7 +66,7 @@ const Settings: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk });
+      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk, printer_name: printerName || null, auto_print_receipt: autoPrintReceipt });
       await refreshSettings();
       notify("Settings saved successfully!", "success");
     } catch (e) { alertCustom("Error saving settings: " + e, "Settings Error", "error"); }
@@ -750,6 +754,79 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Silent Printing card */}
+            <div className="st-card">
+              <h2 className="st-card-title">
+                <Printer size={17} color="#2d5a3d" /> {t('sp_title')}
+              </h2>
+              <p style={{ color: '#7a9e8a', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                {t('sp_description')}
+              </p>
+
+              <div className="st-form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label className="st-label" style={{ margin: 0 }}>{t('sp_printer')}</label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const printers = await api.getPrinters();
+                        setAvailablePrinters(printers);
+                      } catch (e) {
+                        notify(t('sp_detect_failed') + ': ' + e, 'error');
+                      }
+                    }}
+                    style={{
+                      background: 'none', border: 'none', color: '#2d5a3d', cursor: 'pointer',
+                      fontSize: '0.72rem', fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                      display: 'flex', alignItems: 'center', gap: '0.3rem'
+                    }}
+                  >
+                    <RefreshCw size={12} /> {t('sp_detect_printers')}
+                  </button>
+                </div>
+                <select
+                  className="st-input"
+                  value={printerName}
+                  onChange={e => setPrinterName(e.target.value)}
+                >
+                  <option value="">{t('sp_default_printer')}</option>
+                  {availablePrinters.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                {printerName && !availablePrinters.includes(printerName) && (
+                  <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem' }}>
+                    {t('sp_saved_printer')}: {printerName}
+                  </span>
+                )}
+              </div>
+
+              <div className="st-form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={autoPrintReceipt}
+                    onChange={e => setAutoPrintReceipt(e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: '#2d5a3d' }}
+                  />
+                  <span style={{ fontWeight: 700, color: '#1a3528', fontSize: '0.9rem' }}>{t('sp_auto_print')}</span>
+                </label>
+                <span style={{ fontSize: '0.72rem', color: '#7a9e8a', marginTop: '0.2rem' }}>
+                  {t('sp_auto_print_desc')}
+                </span>
+              </div>
+
+              <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#edeae0', borderRadius: '0.625rem', border: '1.5px solid #ddd8cc' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1a3528', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                  {t('sp_info_title')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#7a9e8a', lineHeight: 1.6 }}>
+                  {t('sp_info_desc')}
+                </div>
+              </div>
             </div>
 
             {/* Virtual Keyboard card */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, Tag, X, Printer, Package } from 'lucide-react';
 import { api, Product, Category, SaleItem, formatQtyUnit, priceUnitLabel } from '../api';
 import { useSettings } from '../contexts/SettingsContext';
@@ -29,6 +29,84 @@ const SalesScreen: React.FC = () => {
   const [itemDiscountType, setItemDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { displayMode, isDisplayOpen, broadcastCartUpdate, broadcastSaleComplete, broadcastIdle } = useCustomerDisplay();
+
+  const generateReceiptText = useCallback((
+    receiptData: { items: typeof cart; total: number; billDiscount: number; totalProductDiscount: number; invoice: string },
+    cur: string,
+    shopSettings: typeof settings
+  ): string => {
+    const W = 48; // characters per line (80mm thermal = ~48 chars)
+    const center = (s: string) => {
+      const pad = Math.max(0, Math.floor((W - s.length) / 2));
+      return ' '.repeat(pad) + s;
+    };
+    const leftRight = (l: string, r: string) => {
+      const space = Math.max(1, W - l.length - r.length);
+      return l + ' '.repeat(space) + r;
+    };
+    const dashed = '-'.repeat(W);
+    const lines: string[] = [];
+
+    // Shop name
+    lines.push(center(shopSettings?.shop_name || 'SmartPos'));
+    if (shopSettings?.receipt_text) {
+      lines.push(center(shopSettings.receipt_text));
+    }
+    lines.push(center(`Invoice: ${receiptData.invoice}`));
+    lines.push(dashed);
+
+    // Items
+    receiptData.items.forEach(item => {
+      const itemTotal = item.product.price * item.quantity;
+      lines.push(item.product.name);
+      lines.push(leftRight(
+        `  ${formatQtyUnit(item.quantity, item.product.base_unit)} x ${cur}${item.product.price.toFixed(2)}`,
+        `${cur}${itemTotal.toFixed(2)}`
+      ));
+      if (item.discountValue > 0) {
+        const disc = item.discountType === 'percentage' ? (itemTotal * item.discountValue / 100) : item.discountValue;
+        lines.push(leftRight(
+          `  Disc (${item.discountType === 'percentage' ? `${item.discountValue}%` : 'fixed'})`,
+          `-${cur}${disc.toFixed(2)}`
+        ));
+      }
+    });
+
+    lines.push(dashed);
+
+    // Subtotal
+    const subtotal = receiptData.total + receiptData.billDiscount;
+    lines.push(leftRight(t('subtotal'), `${cur}${subtotal.toFixed(2)}`));
+    if (receiptData.billDiscount > 0) {
+      lines.push(leftRight(t('bill_discount'), `-${cur}${receiptData.billDiscount.toFixed(2)}`));
+    }
+    lines.push(dashed);
+    lines.push(leftRight(t('total'), `${cur}${receiptData.total.toFixed(2)}`));
+    lines.push('');
+
+    // Footer
+    if (shopSettings?.footer_text) {
+      lines.push(center(shopSettings.footer_text));
+    }
+    lines.push(center(new Date().toLocaleString()));
+    lines.push(''); // trailing newline for paper feed
+    lines.push('');
+    lines.push('');
+
+    return lines.join('\n');
+  }, [t]);
+
+  const handleSilentPrint = useCallback(async (
+    receiptData: { items: typeof cart; total: number; billDiscount: number; totalProductDiscount: number; invoice: string }
+  ) => {
+    try {
+      const receiptText = generateReceiptText(receiptData, currency, settings);
+      await api.silentPrint(receiptText, settings?.printer_name || undefined);
+      notify(t('print_success'), 'success');
+    } catch (error) {
+      notify(t('print_failed') + ': ' + error, 'error');
+    }
+  }, [currency, settings, generateReceiptText, notify, t]);
 
   useEffect(() => { loadData(); }, []);
 
@@ -144,7 +222,7 @@ const SalesScreen: React.FC = () => {
       discountType: item.discountType,
     }));
     if (cart.length === 0) {
-      broadcastIdle(currency, settings?.shop_name || 'NyxoPos', settings?.logo_url || null, settings?.footer_text || null);
+      broadcastIdle(currency, settings?.shop_name || 'SmartPos', settings?.logo_url || null, settings?.footer_text || null);
     } else {
       broadcastCartUpdate({
         type: 'cart-update',
@@ -154,7 +232,7 @@ const SalesScreen: React.FC = () => {
         billDiscount: cartStats.billDiscount,
         finalTotal: cartStats.finalTotal,
         currency,
-        shopName: settings?.shop_name || 'NyxoPos',
+        shopName: settings?.shop_name || 'SmartPos',
         logoUrl: settings?.logo_url || null,
         footerText: settings?.footer_text || null,
       });
@@ -179,6 +257,11 @@ const SalesScreen: React.FC = () => {
       const history = await api.getSalesHistory();
       const latest = history[0];
       setShowReceipt({ id: saleId, invoice: latest.invoice_number, items: cartSnapshot, total: statsSnapshot.finalTotal, billDiscount: statsSnapshot.billDiscount, totalProductDiscount: statsSnapshot.totalProductDiscount });
+      // Auto silent-print receipt if enabled
+      if (settings?.auto_print_receipt) {
+        const receiptData = { items: cartSnapshot, total: statsSnapshot.finalTotal, billDiscount: statsSnapshot.billDiscount, totalProductDiscount: statsSnapshot.totalProductDiscount, invoice: latest.invoice_number };
+        handleSilentPrint(receiptData);
+      }
       // Broadcast sale completion to customer display
       if (displayMode !== 'disabled' && isDisplayOpen) {
         broadcastSaleComplete({
@@ -196,7 +279,7 @@ const SalesScreen: React.FC = () => {
           billDiscount: statsSnapshot.billDiscount,
           finalTotal: statsSnapshot.finalTotal,
           currency,
-          shopName: settings?.shop_name || 'NyxoPos',
+          shopName: settings?.shop_name || 'SmartPos',
           logoUrl: settings?.logo_url || null,
           footerText: settings?.footer_text || null,
         });
@@ -1196,7 +1279,7 @@ const SalesScreen: React.FC = () => {
               </div>
               <div className="modal-actions no-print">
                 <button className="modal-btn-cancel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => setShowReceipt(null)}><X size={15} /> {t('close')}</button>
-                <button className="modal-btn-confirm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => window.print()}><Printer size={15} /> {t('print')}</button>
+                <button className="modal-btn-confirm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => handleSilentPrint({ items: showReceipt.items, total: showReceipt.total, billDiscount: showReceipt.billDiscount, totalProductDiscount: showReceipt.totalProductDiscount, invoice: showReceipt.invoice })}><Printer size={15} /> {t('print')}</button>
               </div>
             </div>
           </div>

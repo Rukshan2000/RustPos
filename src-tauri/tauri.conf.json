@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "NyxoPos",
+        "title": "SmartPos",
         "width": 1200,
         "height": 800,
         "resizable": true,

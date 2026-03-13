@@ -62,6 +62,8 @@ pub struct Settings {
     pub kiosk_pin: Option<String>,
     pub idle_timeout_minutes: i32,
     pub auto_start_kiosk: bool,
+    pub printer_name: Option<String>,
+    pub auto_print_receipt: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

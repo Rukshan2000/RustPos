@@ -223,7 +223,7 @@ const Layout: React.FC = () => {
                   <ShoppingCart size={20} color="#a8d4b8" />
                 </div>
                 <div>
-                  <div className="sidebar-brand-name">NyxoPos</div>
+                  <div className="sidebar-brand-name">SmartPos</div>
                   <div className="sidebar-brand-role">{currentUser?.role}</div>
                 </div>
               </div>

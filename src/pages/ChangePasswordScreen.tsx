@@ -290,7 +290,7 @@ const ChangePasswordScreen: React.FC<Props> = ({ username, oldPassword }) => {
             </button>
           </form>
 
-          <p className="cp-footer">NyxoPos · Secure Offline POS</p>
+          <p className="cp-footer">SmartPos · Secure Offline POS</p>
         </div>
       </div>
     </>

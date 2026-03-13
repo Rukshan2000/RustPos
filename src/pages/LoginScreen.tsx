@@ -245,7 +245,7 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
             <div className="logo-icon">
               <ShoppingBag size={28} color="#a8d4b8" />
             </div>
-            <h1 className="logo-title">NyxoPos</h1>
+            <h1 className="logo-title">SmartPos</h1>
             <p className="logo-sub">{t('pos_system')}</p>
           </div>
 
@@ -295,7 +295,7 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
             </button>
           </form>
 
-          <p className="footer-text">NyxoPos · {t('secure_offline_pos')}</p>
+          <p className="footer-text">SmartPos · {t('secure_offline_pos')}</p>
         </div>
       </div>
     </>

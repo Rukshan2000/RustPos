@@ -44,7 +44,7 @@ interface CustomerDisplayContextType {
 
 const CustomerDisplayContext = createContext<CustomerDisplayContextType | undefined>(undefined);
 
-const CHANNEL_NAME = 'nyxopos-customer-display';
+const CHANNEL_NAME = 'smartpos-customer-display';
 const DISPLAY_LABEL = 'customer-display';
 const SETTINGS_KEY = 'customerDisplaySettings';
 

@@ -414,11 +414,12 @@ pub fn get_expiring_products(state: State<DbState>) -> Result<Vec<Product>, Stri
 pub fn get_settings(state: State<DbState>) -> Result<Settings, String> {
     let conn = state.0.lock().unwrap();
     conn.query_row(
-        "SELECT shop_name, receipt_text, logo_url, footer_text, font_size_header, font_size_body, font_size_footer, currency, kiosk_enabled, kiosk_pin, idle_timeout_minutes, auto_start_kiosk FROM settings WHERE id = 1",
+        "SELECT shop_name, receipt_text, logo_url, footer_text, font_size_header, font_size_body, font_size_footer, currency, kiosk_enabled, kiosk_pin, idle_timeout_minutes, auto_start_kiosk, printer_name, auto_print_receipt FROM settings WHERE id = 1",
         [],
         |row| {
             let kiosk_en: i32 = row.get(8)?;
             let auto_start: i32 = row.get(11)?;
+            let auto_print: i32 = row.get(13)?;
             Ok(Settings {
                 shop_name: row.get(0)?,
                 receipt_text: row.get(1)?,
@@ -432,6 +433,8 @@ pub fn get_settings(state: State<DbState>) -> Result<Settings, String> {
                 kiosk_pin: row.get(9)?,
                 idle_timeout_minutes: row.get(10)?,
                 auto_start_kiosk: auto_start != 0,
+                printer_name: row.get(12)?,
+                auto_print_receipt: auto_print != 0,
             })
         }
     ).map_err(|e| e.to_string())
@@ -452,10 +455,13 @@ pub fn update_settings(
     kiosk_pin: Option<String>,
     idle_timeout_minutes: i32,
     auto_start_kiosk: bool,
+    printer_name: Option<String>,
+    auto_print_receipt: bool,
 ) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     let kiosk_en: i32 = if kiosk_enabled { 1 } else { 0 };
     let auto_start: i32 = if auto_start_kiosk { 1 } else { 0 };
+    let auto_print: i32 = if auto_print_receipt { 1 } else { 0 };
     conn.execute(
         "UPDATE settings SET 
             shop_name = ?1, 
@@ -469,7 +475,9 @@ pub fn update_settings(
             kiosk_enabled = ?9,
             kiosk_pin = ?10,
             idle_timeout_minutes = ?11,
-            auto_start_kiosk = ?12
+            auto_start_kiosk = ?12,
+            printer_name = ?13,
+            auto_print_receipt = ?14
          WHERE id = 1",
         params![
             shop_name, 
@@ -484,6 +492,8 @@ pub fn update_settings(
             kiosk_pin,
             idle_timeout_minutes,
             auto_start,
+            printer_name,
+            auto_print,
         ],
     ).map_err(|e| e.to_string())?;
     Ok(())
@@ -520,6 +530,56 @@ pub fn get_daily_sales(state: State<DbState>) -> Result<f64, String> {
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     Ok(total)
+}
+
+#[tauri::command]
+pub fn get_printers() -> Result<Vec<String>, String> {
+    let output = std::process::Command::new("lpstat")
+        .arg("-a")
+        .output()
+        .map_err(|e| format!("Failed to list printers: {}. Is CUPS installed?", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let printers: Vec<String> = stdout
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(|s| s.to_string())
+        .collect();
+    Ok(printers)
+}
+
+#[tauri::command]
+pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Result<(), String> {
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!(
+        "receipt_{}.txt",
+        Local::now().format("%Y%m%d%H%M%S%3f")
+    ));
+    fs::write(&temp_file, receipt_text.as_bytes())
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    let mut cmd = std::process::Command::new("lp");
+    if let Some(ref name) = printer_name {
+        if !name.is_empty() {
+            cmd.args(["-d", name]);
+        }
+    }
+    cmd.arg(&temp_file);
+
+    let output = cmd.output().map_err(|e| {
+        let _ = fs::remove_file(&temp_file);
+        format!("Print failed: {}. Is CUPS installed?", e)
+    })?;
+
+    let _ = fs::remove_file(&temp_file);
+
+    if !output.status.success() {
+        return Err(format!(
+            "Print failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]

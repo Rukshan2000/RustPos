@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { CustomerDisplayData } from '../contexts/CustomerDisplayContext';
 
-const CHANNEL_NAME = 'nyxopos-customer-display';
+const CHANNEL_NAME = 'smartpos-customer-display';
 
 const CustomerDisplay: React.FC = () => {
   const [data, setData] = useState<CustomerDisplayData>({
@@ -12,7 +12,7 @@ const CustomerDisplay: React.FC = () => {
     billDiscount: 0,
     finalTotal: 0,
     currency: '$',
-    shopName: 'NyxoPos',
+    shopName: 'SmartPos',
     logoUrl: null,
     footerText: null,
   });
@@ -420,7 +420,7 @@ const CustomerDisplay: React.FC = () => {
             ? <img src={logoUrl} alt="Logo" className="cd-logo" />
             : <div className="cd-logo-placeholder">{shopName?.[0] || 'N'}</div>
           }
-          <div className="cd-shop-name">{shopName || 'NyxoPos'}</div>
+          <div className="cd-shop-name">{shopName || 'SmartPos'}</div>
         </div>
 
         <div className="cd-divider" />

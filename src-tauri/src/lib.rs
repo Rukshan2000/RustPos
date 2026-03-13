@@ -67,7 +67,9 @@ pub fn run() {
             get_revenue_summary,
             get_revenue_by_period,
             get_product_profit,
-            get_category_profit
+            get_category_profit,
+            get_printers,
+            silent_print
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

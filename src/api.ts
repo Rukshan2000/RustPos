@@ -77,6 +77,8 @@ export interface Settings {
   kiosk_pin: string | null;
   idle_timeout_minutes: number;
   auto_start_kiosk: boolean;
+  printer_name: string | null;
+  auto_print_receipt: boolean;
 }
 
 export interface DashboardStats {
@@ -353,12 +355,19 @@ export const api = {
     kioskPin: settings.kiosk_pin,
     idleTimeoutMinutes: settings.idle_timeout_minutes,
     autoStartKiosk: settings.auto_start_kiosk,
+    printerName: settings.printer_name,
+    autoPrintReceipt: settings.auto_print_receipt,
   }),
   backupDb: () => invoke<string>("backup_db"),
   restoreDb: (backupPath: string) => invoke<void>("restore_db", { backupPath }),
   resetDb: () => invoke<void>("reset_db"),
   
   getDailySales: () => invoke<number>("get_daily_sales"),
+
+  // --- Printing ---
+  getPrinters: () => invoke<string[]>("get_printers"),
+  silentPrint: (receiptText: string, printerName?: string) =>
+    invoke<void>("silent_print", { receiptText, printerName }),
 
   // --- Auth ---
   login: (username: string, password: string) => invoke<UserPublic>("login", { username, password }),

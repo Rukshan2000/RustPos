@@ -125,6 +125,10 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN idle_timeout_minutes INTEGER NOT NULL DEFAULT 5", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN auto_start_kiosk INTEGER NOT NULL DEFAULT 0", []);
 
+    // Migration: silent printing columns
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN printer_name TEXT", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN auto_print_receipt INTEGER NOT NULL DEFAULT 0", []);
+
     // Insert default settings if not exists
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0)).unwrap_or(0);
     if count == 0 {
