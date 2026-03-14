@@ -586,10 +586,13 @@ pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Resul
 pub fn reset_db(state: State<DbState>) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     
-    // Wipe all tables
+    // Wipe all tables in FK-safe order (children first).
     conn.execute_batch(
-        "DELETE FROM sale_items;
+        "DELETE FROM purchase_invoice_items;
+         DELETE FROM purchase_invoices;
+         DELETE FROM sale_items;
          DELETE FROM sales;
+         DELETE FROM suppliers;
          DELETE FROM products;
          DELETE FROM categories;
          DELETE FROM users;

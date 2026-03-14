@@ -14,6 +14,54 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [logoClickCount, setLogoClickCount] = useState(0);
+  const [showResetPopup, setShowResetPopup] = useState(false);
+  const [resetPin, setResetPin] = useState('');
+  const [resetError, setResetError] = useState('');
+
+  const handleLogoClick = () => {
+    const nextCount = logoClickCount + 1;
+    setLogoClickCount(nextCount);
+
+    if (nextCount >= 4) {
+      setShowResetPopup(true);
+      setResetPin('');
+      setResetError('');
+      setLogoClickCount(0);
+      return;
+    }
+
+    // Reset the sequence if clicks are too slow.
+    setTimeout(() => {
+      setLogoClickCount(current => (current === nextCount ? 0 : current));
+    }, 2000);
+  };
+
+  const handleResetWithPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (loading) return;
+    if (resetPin !== '1234') {
+      setResetError('Invalid PIN.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'WARNING: This will permanently delete all data and reset the application. Continue?'
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    setResetError('');
+    try {
+      await api.resetDb();
+      alert('Database reset complete. The app will now reload.');
+      window.location.reload();
+    } catch (err: any) {
+      setResetError(`Failed to reset database: ${err || 'Unknown error'}`);
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,12 +285,86 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
           margin-top: 1.75rem;
           font-weight: 500;
         }
+
+        .logo-click-target {
+          cursor: pointer;
+        }
+
+        .reset-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.45);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 1rem;
+        }
+
+        .reset-popup {
+          width: 100%;
+          max-width: 360px;
+          background: #f5f0e8;
+          border: 1.5px solid #ddd8cc;
+          border-radius: 1rem;
+          padding: 1.4rem;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+        }
+
+        .reset-title {
+          margin: 0 0 0.4rem;
+          color: #1a3528;
+          font-size: 1.1rem;
+          font-weight: 800;
+        }
+
+        .reset-sub {
+          margin: 0 0 1rem;
+          color: #7a9e8a;
+          font-size: 0.84rem;
+        }
+
+        .reset-actions {
+          margin-top: 1rem;
+          display: flex;
+          gap: 0.6rem;
+        }
+
+        .reset-cancel {
+          flex: 1;
+          padding: 0.72rem;
+          border-radius: 0.7rem;
+          border: 1.5px solid #ddd8cc;
+          background: #edeae0;
+          color: #6b7f73;
+          font-weight: 700;
+          cursor: pointer;
+          font-family: 'Nunito', sans-serif;
+        }
+
+        .reset-confirm {
+          flex: 1;
+          padding: 0.72rem;
+          border-radius: 0.7rem;
+          border: none;
+          background: #8f2d2d;
+          color: #fff;
+          font-weight: 700;
+          cursor: pointer;
+          font-family: 'Nunito', sans-serif;
+        }
+
+        .reset-confirm:disabled,
+        .reset-cancel:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
       `}</style>
 
       <div className="login-root">
         <div className="login-card">
           <div className="logo-wrap">
-            <div className="logo-icon">
+            <div className="logo-icon logo-click-target" onClick={handleLogoClick}>
               <ShoppingBag size={28} color="#a8d4b8" />
             </div>
             <h1 className="logo-title">SmartPos</h1>
@@ -298,6 +420,45 @@ const LoginScreen: React.FC<{ onNeedPasswordChange: (username: string) => void }
           <p className="footer-text">SmartPos · {t('secure_offline_pos')}</p>
         </div>
       </div>
+
+      {showResetPopup && (
+        <div className="reset-overlay">
+          <form className="reset-popup" onSubmit={handleResetWithPin}>
+            <h2 className="reset-title">Reset Database</h2>
+            <p className="reset-sub">Enter PIN to reset all data.</p>
+
+            {resetError && <div className="error-box">{resetError}</div>}
+
+            <input
+              type="password"
+              value={resetPin}
+              onChange={e => setResetPin(e.target.value)}
+              placeholder="Enter reset PIN"
+              className="field-input"
+              autoFocus
+            />
+
+            <div className="reset-actions">
+              <button
+                type="button"
+                className="reset-cancel"
+                onClick={() => {
+                  if (loading) return;
+                  setShowResetPopup(false);
+                  setResetPin('');
+                  setResetError('');
+                }}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="reset-confirm" disabled={loading}>
+                Reset
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 };
