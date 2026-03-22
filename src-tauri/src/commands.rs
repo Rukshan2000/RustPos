@@ -532,6 +532,7 @@ pub fn get_daily_sales(state: State<DbState>) -> Result<f64, String> {
     Ok(total)
 }
 
+#[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn get_printers() -> Result<Vec<String>, String> {
     let output = std::process::Command::new("lpstat")
@@ -548,6 +549,13 @@ pub fn get_printers() -> Result<Vec<String>, String> {
     Ok(printers)
 }
 
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn get_printers() -> Result<Vec<String>, String> {
+    Err("Printer detection is only supported on Linux.".to_string())
+}
+
+#[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Result<(), String> {
     let temp_dir = std::env::temp_dir();
@@ -580,6 +588,13 @@ pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Resul
         ));
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Result<(), String> {
+    let _ = (receipt_text, printer_name); // Suppress unused variable warnings
+    Err("Silent printing is only supported on Linux.".to_string())
 }
 
 #[tauri::command]
