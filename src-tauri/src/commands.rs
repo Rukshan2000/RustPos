@@ -557,18 +557,50 @@ pub fn get_printers() -> Result<Vec<String>, String> {
     {
         use std::process::Command;
         
-        // Use PowerShell to get list of printers
+        // Method 1: Try WMI (more compatible across Windows versions)
+        let wmi_output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-WmiObject -Query \"Select Name from Win32_Printer where Network=False\" | Select-Object -ExpandProperty Name"
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output();
+
+        if let Ok(output) = wmi_output {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let printers: Vec<String> = stdout
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .map(|line| line.trim().to_string())
+                    .collect();
+                
+                if !printers.is_empty() {
+                    return Ok(printers);
+                }
+            }
+        }
+
+        // Method 2: Fallback - Try Get-Printer (Windows 8+)
         let output = Command::new("powershell")
             .args([
                 "-NoProfile",
+                "-NonInteractive",
                 "-Command",
-                "Get-Printer -PrinterType Local | Select-Object -ExpandProperty Name"
+                "Get-Printer | Select-Object -ExpandProperty Name"
             ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
             .map_err(|e| format!("Failed to list printers: {}", e))?;
 
         if !output.status.success() {
-            return Err("Failed to enumerate printers. Make sure you have printer drivers installed.".to_string());
+            return Err("Failed to enumerate printers. Please ensure at least one printer is installed and accessible.".to_string());
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -578,7 +610,11 @@ pub fn get_printers() -> Result<Vec<String>, String> {
             .map(|line| line.trim().to_string())
             .collect();
         
-        Ok(printers)
+        if printers.is_empty() {
+            Err("No printers found. Please install a printer driver first (File > Print > Add printer).".to_string())
+        } else {
+            Ok(printers)
+        }
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
