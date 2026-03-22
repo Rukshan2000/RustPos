@@ -1279,7 +1279,14 @@ const SalesScreen: React.FC = () => {
               </div>
               <div className="modal-actions no-print">
                 <button className="modal-btn-cancel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => setShowReceipt(null)}><X size={15} /> {t('close')}</button>
-                <button className="modal-btn-confirm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} onClick={() => handleSilentPrint({ items: showReceipt.items, total: showReceipt.total, billDiscount: showReceipt.billDiscount, totalProductDiscount: showReceipt.totalProductDiscount, invoice: showReceipt.invoice })}><Printer size={15} /> {t('print')}</button>
+                <button 
+                  className="modal-btn-confirm" 
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }} 
+                  title={`Print to: ${settings?.printer_name || 'Default Printer'}`}
+                  onClick={() => handleSilentPrint({ items: showReceipt.items, total: showReceipt.total, billDiscount: showReceipt.billDiscount, totalProductDiscount: showReceipt.totalProductDiscount, invoice: showReceipt.invoice })}
+                >
+                  <Printer size={15} /> {t('print')}
+                </button>
               </div>
             </div>
           </div>
