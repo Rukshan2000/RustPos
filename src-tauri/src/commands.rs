@@ -622,7 +622,7 @@ pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Resul
 
     #[cfg(target_os = "windows")]
     {
-        use std::process::Command;
+        use std::process::{Command, Stdio};
         
         // Create a temporary file with the receipt content
         let temp_dir = std::env::temp_dir();
@@ -635,60 +635,92 @@ pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Resul
             .map_err(|e| format!("Failed to write receipt file: {}", e))?;
 
         let file_path = temp_file.to_string_lossy().to_string();
-        
-        // Use Windows print command
-        if let Some(printer) = printer_name.filter(|p| !p.is_empty()) {
-            // Print to specific printer using PowerShell
-            let cmd_str = format!(
-                "Get-Content '{}' | Out-Printer -Name '{}'",
-                file_path.replace("'", "''"), 
-                printer.replace("'", "''")
-            );
-            
-            let output = Command::new("powershell")
-                .args(["-NoProfile", "-Command", &cmd_str])
+        let result = if let Some(printer) = printer_name.filter(|p| !p.is_empty()) {
+            // Method 1: Try Windows 'print' command with specific printer
+            let output = Command::new("cmd")
+                .args([
+                    "/C",
+                    &format!("print /D:\\\\\\\\{}\\\\{} \"{}\"", 
+                        ".",  // local computer
+                        printer.replace("\"", "\\\""),
+                        file_path.replace("\"", "\\\"")
+                    )
+                ])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .creation_flags(0x08000000) // CREATE_NO_WINDOW
-                .output()
-                .map_err(|e| {
-                    let _ = fs::remove_file(&temp_file);
-                    format!("Print command failed: {}", e)
-                })?;
+                .output();
 
-            let _ = fs::remove_file(&temp_file);
+            if let Ok(out) = output {
+                if out.status.success() {
+                    Ok(())
+                } else {
+                    // Fallback: Try PowerShell if print command fails
+                    let ps_output = Command::new("powershell")
+                        .args([
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            &format!(
+                                "(New-Object -ComObject WScript.Shell).CreateShortcut('').TargetPath | Out-Null; Get-Content '{}' | Out-Printer -Name '{}'",
+                                file_path.replace("'", "''"),
+                                printer.replace("'", "''")
+                            )
+                        ])
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .creation_flags(0x08000000)
+                        .output();
 
-            if !output.status.success() {
-                return Err(format!(
-                    "Print to '{}' failed: {}",
-                    printer,
-                    String::from_utf8_lossy(&output.stderr)
-                ));
+                    match ps_output {
+                        Ok(ps_out) if ps_out.status.success() => Ok(()),
+                        _ => Err(format!("Failed to print to printer '{}'. Please verify the printer name is correct and the printer is connected.", printer))
+                    }
+                }
+            } else {
+                Err("Failed to execute print command".to_string())
             }
         } else {
-            // Print to default printer
-            let output = Command::new("powershell")
+            // Print to default printer using print command
+            let output = Command::new("cmd")
                 .args([
-                    "-NoProfile",
-                    "-Command",
-                    &format!("Get-Content '{}' | Out-Printer", file_path.replace("'", "''"))
+                    "/C",
+                    &format!("print \"{}\"", file_path.replace("\"", "\\\""))
                 ])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .creation_flags(0x08000000) // CREATE_NO_WINDOW
-                .output()
-                .map_err(|e| {
-                    let _ = fs::remove_file(&temp_file);
-                    format!("Print command failed: {}", e)
-                })?;
+                .output();
 
-            let _ = fs::remove_file(&temp_file);
+            if let Ok(out) = output {
+                if out.status.success() {
+                    Ok(())
+                } else {
+                    // Fallback to PowerShell
+                    let ps_output = Command::new("powershell")
+                        .args([
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            &format!("Get-Content '{}' | Out-Printer", file_path.replace("'", "''"))
+                        ])
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .creation_flags(0x08000000)
+                        .output();
 
-            if !output.status.success() {
-                return Err(format!(
-                    "Print to default printer failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ));
+                    match ps_output {
+                        Ok(ps_out) if ps_out.status.success() => Ok(()),
+                        _ => Err("Failed to print to default printer. Please configure a default printer in Windows settings.".to_string())
+                    }
+                }
+            } else {
+                Err("Failed to execute print command".to_string())
             }
-        }
+        };
 
-        Ok(())
+        let _ = fs::remove_file(&temp_file);
+        result
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
