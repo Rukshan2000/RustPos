@@ -129,6 +129,12 @@ pub fn init_db(app_handle: &AppHandle) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN printer_name TEXT", []);
     let _ = conn.execute("ALTER TABLE settings ADD COLUMN auto_print_receipt INTEGER NOT NULL DEFAULT 0", []);
 
+    // Migration: receipt customization columns
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN receipt_width INTEGER NOT NULL DEFAULT 32", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN separator_style TEXT NOT NULL DEFAULT 'equals'", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN show_invoice_number INTEGER NOT NULL DEFAULT 1", []);
+    let _ = conn.execute("ALTER TABLE settings ADD COLUMN currency_position TEXT NOT NULL DEFAULT 'before'", []);
+
     // Insert default settings if not exists
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0)).unwrap_or(0);
     if count == 0 {

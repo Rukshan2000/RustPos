@@ -417,12 +417,13 @@ pub fn get_expiring_products(state: State<DbState>) -> Result<Vec<Product>, Stri
 pub fn get_settings(state: State<DbState>) -> Result<Settings, String> {
     let conn = state.0.lock().unwrap();
     conn.query_row(
-        "SELECT shop_name, receipt_text, logo_url, footer_text, font_size_header, font_size_body, font_size_footer, currency, kiosk_enabled, kiosk_pin, idle_timeout_minutes, auto_start_kiosk, printer_name, auto_print_receipt FROM settings WHERE id = 1",
+        "SELECT shop_name, receipt_text, logo_url, footer_text, font_size_header, font_size_body, font_size_footer, currency, kiosk_enabled, kiosk_pin, idle_timeout_minutes, auto_start_kiosk, printer_name, auto_print_receipt, receipt_width, separator_style, show_invoice_number, currency_position FROM settings WHERE id = 1",
         [],
         |row| {
             let kiosk_en: i32 = row.get(8)?;
             let auto_start: i32 = row.get(11)?;
             let auto_print: i32 = row.get(13)?;
+            let show_inv: i32 = row.get(16)?;
             Ok(Settings {
                 shop_name: row.get(0)?,
                 receipt_text: row.get(1)?,
@@ -438,6 +439,10 @@ pub fn get_settings(state: State<DbState>) -> Result<Settings, String> {
                 auto_start_kiosk: auto_start != 0,
                 printer_name: row.get(12)?,
                 auto_print_receipt: auto_print != 0,
+                receipt_width: row.get(14)?,
+                separator_style: row.get(15)?,
+                show_invoice_number: show_inv != 0,
+                currency_position: row.get(17)?,
             })
         }
     ).map_err(|e| e.to_string())
@@ -460,11 +465,16 @@ pub fn update_settings(
     auto_start_kiosk: bool,
     printer_name: Option<String>,
     auto_print_receipt: bool,
+    receipt_width: i32,
+    separator_style: String,
+    show_invoice_number: bool,
+    currency_position: String,
 ) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     let kiosk_en: i32 = if kiosk_enabled { 1 } else { 0 };
     let auto_start: i32 = if auto_start_kiosk { 1 } else { 0 };
     let auto_print: i32 = if auto_print_receipt { 1 } else { 0 };
+    let show_inv: i32 = if show_invoice_number { 1 } else { 0 };
     conn.execute(
         "UPDATE settings SET 
             shop_name = ?1, 
@@ -480,7 +490,11 @@ pub fn update_settings(
             idle_timeout_minutes = ?11,
             auto_start_kiosk = ?12,
             printer_name = ?13,
-            auto_print_receipt = ?14
+            auto_print_receipt = ?14,
+            receipt_width = ?15,
+            separator_style = ?16,
+            show_invoice_number = ?17,
+            currency_position = ?18
          WHERE id = 1",
         params![
             shop_name, 
@@ -497,6 +511,10 @@ pub fn update_settings(
             auto_start,
             printer_name,
             auto_print,
+            receipt_width,
+            separator_style,
+            show_inv,
+            currency_position,
         ],
     ).map_err(|e| e.to_string())?;
     Ok(())

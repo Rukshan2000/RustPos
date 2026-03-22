@@ -35,7 +35,16 @@ const SalesScreen: React.FC = () => {
     cur: string,
     shopSettings: typeof settings
   ): string => {
-    const W = 48; // characters per line (80mm thermal = ~48 chars)
+    const W = shopSettings?.receipt_width || 32; // Use customizable width
+    const separatorChar = shopSettings?.separator_style === 'dashes' ? '-' : '=';
+    const currencyPos = shopSettings?.currency_position || 'before';
+    const showInv = shopSettings?.show_invoice_number !== false;
+    
+    const formatCurrency = (amount: number) => {
+      const formatted = amount.toFixed(2);
+      return currencyPos === 'before' ? `${cur}${formatted}` : `${formatted}${cur}`;
+    };
+    
     const center = (s: string) => {
       const pad = Math.max(0, Math.floor((W - s.length) / 2));
       return ' '.repeat(pad) + s;
@@ -44,44 +53,57 @@ const SalesScreen: React.FC = () => {
       const space = Math.max(1, W - l.length - r.length);
       return l + ' '.repeat(space) + r;
     };
-    const dashed = '-'.repeat(W);
+    const topBorder = separatorChar === '-' ? '-'.repeat(W) : '='.repeat(W);
+    const thinLine = separatorChar === '-' ? ' '.repeat(W) : '-'.repeat(W);
     const lines: string[] = [];
 
-    // Shop name
-    lines.push(center(shopSettings?.shop_name || 'SmartPos'));
+    // Header with dark border
+    lines.push(topBorder);
+    lines.push(center((shopSettings?.shop_name || 'SmartPos').toUpperCase()));
+    lines.push(topBorder);
+    
     if (shopSettings?.receipt_text) {
       lines.push(center(shopSettings.receipt_text));
     }
-    lines.push(center(`Invoice: ${receiptData.invoice}`));
-    lines.push(dashed);
+    if (showInv) {
+      lines.push(center(`INV: ${receiptData.invoice}`));
+    }
+    lines.push(thinLine);
 
     // Items
     receiptData.items.forEach(item => {
       const itemTotal = item.product.price * item.quantity;
-      lines.push(item.product.name);
+      // Truncate product name if too long
+      const productName = item.product.name.length > W - 2 
+        ? item.product.name.substring(0, W - 2) 
+        : item.product.name;
+      lines.push(productName);
       lines.push(leftRight(
-        `  ${formatQtyUnit(item.quantity, item.product.base_unit)} x ${cur}${item.product.price.toFixed(2)}`,
-        `${cur}${itemTotal.toFixed(2)}`
+        `${formatQtyUnit(item.quantity, item.product.base_unit)}x ${cur}${item.product.price.toFixed(2)}`,
+        formatCurrency(itemTotal)
       ));
       if (item.discountValue > 0) {
         const disc = item.discountType === 'percentage' ? (itemTotal * item.discountValue / 100) : item.discountValue;
         lines.push(leftRight(
-          `  Disc (${item.discountType === 'percentage' ? `${item.discountValue}%` : 'fixed'})`,
-          `-${cur}${disc.toFixed(2)}`
+          `DISC: ${item.discountType === 'percentage' ? `${item.discountValue}%` : 'fixed'}`,
+          `-${formatCurrency(disc)}`
         ));
       }
     });
 
-    lines.push(dashed);
+    lines.push(thinLine);
 
-    // Subtotal
+    // Subtotal and Discounts
     const subtotal = receiptData.total + receiptData.billDiscount;
-    lines.push(leftRight(t('subtotal'), `${cur}${subtotal.toFixed(2)}`));
+    lines.push(leftRight('SUBTOTAL', formatCurrency(subtotal)));
     if (receiptData.billDiscount > 0) {
-      lines.push(leftRight(t('bill_discount'), `-${cur}${receiptData.billDiscount.toFixed(2)}`));
+      lines.push(leftRight('BILL DISC', `-${formatCurrency(receiptData.billDiscount)}`));
     }
-    lines.push(dashed);
-    lines.push(leftRight(t('total'), `${cur}${receiptData.total.toFixed(2)}`));
+    
+    // Final total with dark border
+    lines.push(topBorder);
+    lines.push(leftRight('TOTAL', formatCurrency(receiptData.total)));
+    lines.push(topBorder);
     lines.push('');
 
     // Footer

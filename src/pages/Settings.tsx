@@ -29,6 +29,10 @@ const Settings: React.FC = () => {
   const [printerName, setPrinterName] = useState('');
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
+  const [receiptWidth, setReceiptWidth] = useState(32);
+  const [separatorStyle, setSeparatorStyle] = useState<'dashes' | 'equals' | 'mixed'>('equals');
+  const [showInvoiceNumber, setShowInvoiceNumber] = useState(true);
+  const [currencyPosition, setCurrencyPosition] = useState<'before' | 'after'>('before');
   const { refreshSettings } = useSettings();
   const { notify, alertCustom, confirmCustom } = useNotifications();
   const { t, i18n } = useTranslation();
@@ -59,6 +63,10 @@ const Settings: React.FC = () => {
       setKioskEnabled(s.kiosk_enabled); setKioskPin(s.kiosk_pin || '');
       setIdleTimeoutMinutes(s.idle_timeout_minutes); setAutoStartKiosk(s.auto_start_kiosk);
       setPrinterName(s.printer_name || ''); setAutoPrintReceipt(s.auto_print_receipt);
+      setReceiptWidth(s.receipt_width || 32);
+      setSeparatorStyle((s.separator_style || 'equals') as 'dashes' | 'equals' | 'mixed');
+      setShowInvoiceNumber(s.show_invoice_number || true);
+      setCurrencyPosition((s.currency_position || 'before') as 'before' | 'after');
     } catch (e) { console.error(e); }
   };
 
@@ -66,7 +74,7 @@ const Settings: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk, printer_name: printerName || null, auto_print_receipt: autoPrintReceipt });
+      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk, printer_name: printerName || null, auto_print_receipt: autoPrintReceipt, receipt_width: receiptWidth, separator_style: separatorStyle, show_invoice_number: showInvoiceNumber, currency_position: currencyPosition });
       await refreshSettings();
       notify("Settings saved successfully!", "success");
     } catch (e) { alertCustom("Error saving settings: " + e, "Settings Error", "error"); }
@@ -390,16 +398,19 @@ const Settings: React.FC = () => {
           background: #faf8f4;
           border: 1.5px solid #ddd8cc;
           border-radius: 1.125rem;
-          padding: 2rem 1.75rem;
+          padding: 1.25rem 0.75rem;
           min-height: 480px;
+          max-width: 280px;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
           font-family: 'Courier New', monospace;
-          color: #2a2a2a;
+          color: #1a1a1a;
           position: sticky;
           top: 0;
+          font-size: 11px;
+          line-height: 1.5;
         }
 
         .st-receipt-logo-placeholder {
@@ -407,7 +418,7 @@ const Settings: React.FC = () => {
           height: 52px;
           background: #edeae0;
           border-radius: 50%;
-          margin-bottom: 1rem;
+          margin-bottom: 0.75rem;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -417,22 +428,31 @@ const Settings: React.FC = () => {
         .st-receipt-dashed {
           width: 100%;
           border: none;
-          border-top: 1px dashed #c8c4b8;
-          margin: 0.875rem 0;
+          border-top: 1px solid #2a2a2a;
+          margin: 0.5rem 0;
         }
 
         .st-receipt-row {
           width: 100%;
           display: flex;
           justify-content: space-between;
-          margin-bottom: 0.4rem;
+          margin-bottom: 0.3rem;
+          font-size: 10px;
+          font-weight: 600;
+          color: #1a1a1a;
         }
 
         .st-receipt-total-row {
           width: 100%;
           display: flex;
           justify-content: space-between;
-          font-weight: bold;
+          font-weight: 800;
+          font-size: 11px;
+          color: #000;
+          border-top: 2px solid #2a2a2a;
+          border-bottom: 2px solid #2a2a2a;
+          padding: 0.3rem 0;
+          margin: 0.4rem 0;
         }
 
         .st-backup-note {
@@ -602,23 +622,79 @@ const Settings: React.FC = () => {
                   </span>
                 </div>
 
+                {/* Receipt Customization */}
+                <div style={{ marginTop: '1.25rem', padding: '0.875rem 1rem', background: '#f5f3f0', borderRadius: '0.625rem', border: '1.5px solid #ddd8cc' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2d5a3d', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>
+                    🎨 Receipt Customization
+                  </div>
+
+                  <div className="st-form-grid-2">
+                    <div className="st-form-group">
+                      <label className="st-label">Receipt Width (characters)</label>
+                      <select className="st-input" value={receiptWidth} onChange={e => setReceiptWidth(parseInt(e.target.value))}>
+                        <option value={32}>32 chars (8cm thermal)</option>
+                        <option value={40}>40 chars (58mm thermal)</option>
+                        <option value={48}>48 chars (80mm thermal)</option>
+                      </select>
+                      <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem', display: 'block' }}>Adjust for your printer width</span>
+                    </div>
+
+                    <div className="st-form-group">
+                      <label className="st-label">Separator Style</label>
+                      <select className="st-input" value={separatorStyle} onChange={e => setSeparatorStyle(e.target.value as 'dashes' | 'equals' | 'mixed')}>
+                        <option value="equals">Equals (=====)</option>
+                        <option value="dashes">Dashes (-----)</option>
+                        <option value="mixed">Mixed</option>
+                      </select>
+                      <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem', display: 'block' }}>Choose separator line style</span>
+                    </div>
+                  </div>
+
+                  <div className="st-form-grid-2">
+                    <div className="st-form-group">
+                      <label className="st-label">Currency Position</label>
+                      <select className="st-input" value={currencyPosition} onChange={e => setCurrencyPosition(e.target.value as 'before' | 'after')}>
+                        <option value="before">Before Amount ($100)</option>
+                        <option value="after">After Amount (100$)</option>
+                      </select>
+                    </div>
+
+                    <div className="st-form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer', flex: 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={showInvoiceNumber}
+                          onChange={e => setShowInvoiceNumber(e.target.checked)}
+                          style={{ width: '18px', height: '18px', accentColor: '#2d5a3d' }}
+                        />
+                        <span style={{ fontWeight: 700, color: '#1a3528' }}>Show Invoice Number</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={async () => {
                     try {
                       const testText = `
-TEST RECEIPT
+================================
+        SMART POS - TEST
+================================
+Test Receipt
+INV: TEST-001
+--------------------------------
+Test Product
+1x $10.00         $10.00
+================================
+SUBTOTAL              $10.00
+TOTAL                 $10.00
+================================
+
+Test print successful!
 ${new Date().toLocaleString()}
 
-Item: Test Product
-Price: $10.00
-Quantity: 1
-Total: $10.00
 
-This is a test print to verify
-your printer is working correctly.
-
-Thank you!
 `.trim();
                       await api.silentPrint(testText, printerName || undefined);
                       notify("Test receipt sent to printer!", "success");
@@ -897,37 +973,44 @@ Thank you!
             <div className="st-preview-label">{t('live_receipt_preview')}</div>
             <div className="st-receipt-card">
               {logoUrl
-                ? <img src={logoUrl} alt="Logo" style={{ maxWidth: '90px', marginBottom: '1rem' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                ? <img src={logoUrl} alt="Logo" style={{ maxWidth: '80px', marginBottom: '0.5rem' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
                 : <div className="st-receipt-logo-placeholder"><ImageIcon size={22} /></div>}
 
-              <div style={{ fontSize: `${fontSizeHeader}px`, fontWeight: 'bold', marginBottom: '0.2rem', color: '#1a1a1a' }}>
-                {shopName || t('shop_name_placeholder')}
+              <div style={{ fontSize: '12px', fontWeight: '800', marginBottom: '0.15rem', color: '#000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {(shopName || t('shop_name_placeholder')).substring(0, 30)}
               </div>
-              <div style={{ fontSize: `${fontSizeBody}px`, color: '#666', marginBottom: '0.5rem' }}>
+              <div style={{ fontSize: '9px', color: '#333', marginBottom: '0.4rem', fontWeight: 600 }}>
                 {receiptText || t('header_message_area')}
               </div>
 
+              <div style={{ fontSize: '8px', color: '#666', marginBottom: '0.3rem' }}>
+                INV: TEST-001
+              </div>
               <hr className="st-receipt-dashed" />
 
-              <div className="st-receipt-row" style={{ fontSize: `${fontSizeBody}px` }}>
-                <span>{t('item')} × 1</span><span>{currency}10.00</span>
+              <div className="st-receipt-row">
+                <span>{t('item')}</span><span>{currency}10.00</span>
               </div>
-              <div className="st-receipt-row" style={{ fontSize: `${fontSizeBody}px` }}>
-                <span>{t('another_item')} × 2</span><span>{currency}20.00</span>
+              <div className="st-receipt-row">
+                <span>{t('another_item')}</span><span>{currency}20.00</span>
               </div>
 
               <hr className="st-receipt-dashed" />
 
-              <div className="st-receipt-total-row" style={{ fontSize: `${fontSizeBody}px` }}>
+              <div className="st-receipt-row" style={{ fontSize: '9px', fontWeight: 600 }}>
+                <span>{t('subtotal_label')}</span><span>{currency}30.00</span>
+              </div>
+
+              <div className="st-receipt-total-row">
                 <span>{t('total_caps')}</span><span>{currency}30.00</span>
               </div>
 
               <div style={{ flex: 1 }} />
 
-              <div style={{ fontSize: `${fontSizeFooter}px`, color: '#888', marginTop: '1.5rem' }}>
+              <div style={{ fontSize: '9px', color: '#666', marginTop: '0.75rem', fontWeight: 500 }}>
                 {footerText || t('footer_branding_area')}
               </div>
-              <div style={{ fontSize: '10px', color: '#b0a898', marginTop: '0.4rem' }}>
+              <div style={{ fontSize: '8px', color: '#999', marginTop: '0.3rem' }}>
                 {new Date().toLocaleString()}
               </div>
             </div>

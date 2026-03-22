@@ -64,6 +64,10 @@ pub struct Settings {
     pub auto_start_kiosk: bool,
     pub printer_name: Option<String>,
     pub auto_print_receipt: bool,
+    pub receipt_width: i32,
+    pub separator_style: String,
+    pub show_invoice_number: bool,
+    pub currency_position: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

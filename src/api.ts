@@ -79,6 +79,10 @@ export interface Settings {
   auto_start_kiosk: boolean;
   printer_name: string | null;
   auto_print_receipt: boolean;
+  receipt_width: number;
+  separator_style: 'dashes' | 'equals' | 'mixed';
+  show_invoice_number: boolean;
+  currency_position: 'before' | 'after';
 }
 
 export interface DashboardStats {
