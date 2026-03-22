@@ -15,6 +15,9 @@ use tauri::AppHandle;
 use tauri::Manager;
 use rand::Rng;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 // --- Categories ---
 
 #[tauri::command]
