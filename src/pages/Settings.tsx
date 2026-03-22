@@ -602,6 +602,52 @@ const Settings: React.FC = () => {
                   </span>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const testText = `
+TEST RECEIPT
+${new Date().toLocaleString()}
+
+Item: Test Product
+Price: $10.00
+Quantity: 1
+Total: $10.00
+
+This is a test print to verify
+your printer is working correctly.
+
+Thank you!
+`.trim();
+                      await api.silentPrint(testText, printerName || undefined);
+                      notify("Test receipt sent to printer!", "success");
+                    } catch (e) {
+                      alertCustom("Test print failed: " + e, "Print Error", "error");
+                    }
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.65rem 1rem',
+                    background: '#8b5e3c',
+                    border: 'none',
+                    borderRadius: '0.625rem',
+                    fontFamily: 'Nunito, sans-serif',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    color: '#fff',
+                    cursor: 'pointer',
+                    transition: 'background 0.12s',
+                    marginTop: '0.5rem',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#7a4f33')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = '#8b5e3c')}
+                >
+                  🖨️ Test Print
+                </button>
+
                 <button type="submit" className="st-save-btn" disabled={loading}>
                   <Save size={16} /> {loading ? t('saving_changes') : t('save_all_settings')}
                 </button>

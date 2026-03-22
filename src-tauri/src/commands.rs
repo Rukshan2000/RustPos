@@ -674,55 +674,53 @@ pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Resul
             .map_err(|e| format!("Failed to write receipt file: {}", e))?;
 
         let file_path = temp_file.to_string_lossy().into_owned();
+        let file_path_escaped = file_path.replace("'", "''");
         
         let result = if let Some(printer) = printer_name.filter(|p| !p.is_empty()) {
-            // Print to specific printer using CMD and print utility
-            // Format: print /D:\\printer_name "file_path"
-            let print_cmd = format!("print /D:\"{}\" \"{}\"", printer, file_path);
+            // Use PowerShell to send file to specific printer
+            let ps_cmd = format!(
+                "Get-Content '{}' | Out-Printer -Name '{}'",
+                file_path_escaped, 
+                printer.replace("'", "''")
+            );
             
-            let output = Command::new("cmd")
-                .args(["/c", &print_cmd])
+            let output = Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
                 .creation_flags(0x08000000) // CREATE_NO_WINDOW
                 .output();
 
             match output {
-                Ok(out) => {
-                    if out.status.success() {
-                        Ok(())
-                    } else {
-                        Err(format!(
-                            "Print failed. Printer: {}, File: {}",
-                            printer, file_path
-                        ))
+                Ok(out) if out.status.success() => Ok(()),
+                _ => {
+                    // Fallback: Use notepad print (most compatible)
+                    let notepad_output = Command::new("notepad")
+                        .args(["/p", &file_path])
+                        .creation_flags(0x08000000)
+                        .spawn();
+                    
+                    match notepad_output {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(format!("Failed to print to printer '{}': {}", printer, e))
                     }
                 }
-                Err(e) => Err(format!("Failed to execute print command: {}", e))
             }
         } else {
-            // Print to default printer
-            let print_cmd = format!("print \"{}\"", file_path);
-            
-            let output = Command::new("cmd")
-                .args(["/c", &print_cmd])
+            // Print to default printer - use notepad which respects default printer
+            let notepad_output = Command::new("notepad")
+                .args(["/p", &file_path])
                 .creation_flags(0x08000000)
-                .output();
+                .spawn();
 
-            match output {
-                Ok(out) => {
-                    if out.status.success() {
-                        Ok(())
-                    } else {
-                        Err("Print failed. Make sure a default printer is configured.".to_string())
-                    }
-                }
-                Err(e) => Err(format!("Failed to execute print command: {}", e))
+            match notepad_output {
+                Ok(_) => Ok(()),
+                Err(e) => Err(format!("Failed to print: {}", e))
             }
         };
 
-        // Schedule cleanup of temp file after 3 seconds to allow spooling
+        // Clean up temp file after a delay (notepad takes time to spool)
         let file_to_clean = temp_file.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(3));
+            std::thread::sleep(std::time::Duration::from_secs(5));
             let _ = std::fs::remove_file(&file_to_clean);
         });
         
