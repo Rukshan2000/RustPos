@@ -532,69 +532,170 @@ pub fn get_daily_sales(state: State<DbState>) -> Result<f64, String> {
     Ok(total)
 }
 
-#[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn get_printers() -> Result<Vec<String>, String> {
-    let output = std::process::Command::new("lpstat")
-        .arg("-a")
-        .output()
-        .map_err(|e| format!("Failed to list printers: {}. Is CUPS installed?", e))?;
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("lpstat")
+            .arg("-a")
+            .output()
+            .map_err(|e| format!("Failed to list printers: {}. Is CUPS installed?", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let printers: Vec<String> = stdout
-        .lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .map(|s| s.to_string())
-        .collect();
-    Ok(printers)
-}
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let printers: Vec<String> = stdout
+            .lines()
+            .filter_map(|line| line.split_whitespace().next())
+            .map(|s| s.to_string())
+            .collect();
+        Ok(printers)
+    }
 
-#[cfg(not(target_os = "linux"))]
-#[tauri::command]
-pub fn get_printers() -> Result<Vec<String>, String> {
-    Err("Printer detection is only supported on Linux.".to_string())
-}
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        
+        // Use PowerShell to get list of printers
+        let output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Get-Printer -PrinterType Local | Select-Object -ExpandProperty Name"
+            ])
+            .output()
+            .map_err(|e| format!("Failed to list printers: {}", e))?;
 
-#[cfg(target_os = "linux")]
-#[tauri::command]
-pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Result<(), String> {
-    let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join(format!(
-        "receipt_{}.txt",
-        Local::now().format("%Y%m%d%H%M%S%3f")
-    ));
-    fs::write(&temp_file, receipt_text.as_bytes())
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-
-    let mut cmd = std::process::Command::new("lp");
-    if let Some(ref name) = printer_name {
-        if !name.is_empty() {
-            cmd.args(["-d", name]);
+        if !output.status.success() {
+            return Err("Failed to enumerate printers. Make sure you have printer drivers installed.".to_string());
         }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let printers: Vec<String> = stdout
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.trim().to_string())
+            .collect();
+        
+        Ok(printers)
     }
-    cmd.arg(&temp_file);
 
-    let output = cmd.output().map_err(|e| {
-        let _ = fs::remove_file(&temp_file);
-        format!("Print failed: {}. Is CUPS installed?", e)
-    })?;
-
-    let _ = fs::remove_file(&temp_file);
-
-    if !output.status.success() {
-        return Err(format!(
-            "Print failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        Err("Printer detection is not supported on this platform.".to_string())
     }
-    Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Result<(), String> {
-    let _ = (receipt_text, printer_name); // Suppress unused variable warnings
-    Err("Silent printing is only supported on Linux.".to_string())
+    #[cfg(target_os = "linux")]
+    {
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!(
+            "receipt_{}.txt",
+            Local::now().format("%Y%m%d%H%M%S%3f")
+        ));
+        fs::write(&temp_file, receipt_text.as_bytes())
+            .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+        let mut cmd = std::process::Command::new("lp");
+        if let Some(ref name) = printer_name {
+            if !name.is_empty() {
+                cmd.args(["-d", name]);
+            }
+        }
+        cmd.arg(&temp_file);
+
+        let output = cmd.output().map_err(|e| {
+            let _ = fs::remove_file(&temp_file);
+            format!("Print failed: {}. Is CUPS installed?", e)
+        })?;
+
+        let _ = fs::remove_file(&temp_file);
+
+        if !output.status.success() {
+            return Err(format!(
+                "Print failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        
+        // Create a temporary file with the receipt content
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!(
+            "receipt_{}.txt",
+            Local::now().format("%Y%m%d%H%M%S%3f")
+        ));
+        
+        fs::write(&temp_file, receipt_text.as_bytes())
+            .map_err(|e| format!("Failed to write receipt file: {}", e))?;
+
+        let file_path = temp_file.to_string_lossy().to_string();
+        
+        // Use Windows print command
+        if let Some(printer) = printer_name.filter(|p| !p.is_empty()) {
+            // Print to specific printer using PowerShell
+            let cmd_str = format!(
+                "Get-Content '{}' | Out-Printer -Name '{}'",
+                file_path.replace("'", "''"), 
+                printer.replace("'", "''")
+            );
+            
+            let output = Command::new("powershell")
+                .args(["-NoProfile", "-Command", &cmd_str])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| {
+                    let _ = fs::remove_file(&temp_file);
+                    format!("Print command failed: {}", e)
+                })?;
+
+            let _ = fs::remove_file(&temp_file);
+
+            if !output.status.success() {
+                return Err(format!(
+                    "Print to '{}' failed: {}",
+                    printer,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+        } else {
+            // Print to default printer
+            let output = Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    &format!("Get-Content '{}' | Out-Printer", file_path.replace("'", "''"))
+                ])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| {
+                    let _ = fs::remove_file(&temp_file);
+                    format!("Print command failed: {}", e)
+                })?;
+
+            let _ = fs::remove_file(&temp_file);
+
+            if !output.status.success() {
+                return Err(format!(
+                    "Print to default printer failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (receipt_text, printer_name);
+        Err("Silent printing is not supported on this platform.".to_string())
+    }
 }
 
 #[tauri::command]

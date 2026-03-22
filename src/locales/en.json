@@ -359,7 +359,7 @@
   "vk_info_desc": "When enabled, the virtual keyboard will automatically appear when any text, number, search, or password field is focused. It provides full, numeric, password, and search layouts depending on the input type.",
 
   "sp_title": "Silent Printing",
-  "sp_description": "Print receipts directly to a connected printer without opening a print dialog. Requires CUPS printing service on Linux.",
+  "sp_description": "Print receipts directly to a connected printer without opening a print dialog. Works with CUPS on Linux and thermal printers on Windows.",
   "sp_printer": "Printer",
   "sp_detect_printers": "Detect Printers",
   "sp_detect_failed": "Failed to detect printers",
@@ -368,7 +368,7 @@
   "sp_auto_print": "Auto-print receipt after sale",
   "sp_auto_print_desc": "Automatically print the receipt when a sale is completed, without showing the receipt dialog first.",
   "sp_info_title": "How it works",
-  "sp_info_desc": "Receipts are generated as PDF and sent directly to the selected printer via the system print service (CUPS). Click 'Detect Printers' to scan for available printers.",
+  "sp_info_desc": "Receipts are sent directly to the selected printer via the system print service. CUPS on Linux or Windows thermal/network printers. Click 'Detect Printers' to scan for available printers.",
   "print_success": "Receipt sent to printer",
   "print_failed": "Print failed"
 }

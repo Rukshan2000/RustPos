@@ -32,3 +32,10 @@ sha2 = "0.10"
 hex = "0.4"
 rand = "0.8"
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Graphics_Printing",
+    "Win32_Graphics_Gdi",
+    "Win32_Foundation",
+] }
+
