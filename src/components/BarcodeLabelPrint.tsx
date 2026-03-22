@@ -307,9 +307,9 @@ const BarcodeLabelPrint: React.FC<BarcodeLabelPrintProps> = ({ products, onClose
                   />
                 ))
               ))}
-              {labelData.reduce((a, l) => a + l.quantity, 0) > labelData.length * 3 && (
+              {labelData.reduce((a: number, l) => a + l.quantity, 0) > labelData.length * 3 && (
                 <div style={{ width: '100%', textAlign: 'center', color: '#7a9e8a', fontSize: '0.75rem', padding: '0.5rem' }}>
-                  ... {t('and_more_labels', { count: labelData.reduce((a, l) => a + l.quantity, 0) })}
+                  ... {t('and_more_labels', { count: labelData.reduce((a: number, l) => a + l.quantity, 0) })}
                 </div>
               )}
             </div>
