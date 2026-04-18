@@ -491,7 +491,7 @@ pub fn update_settings(
             auto_start_kiosk = ?12,
             printer_name = ?13,
             auto_print_receipt = ?14,
-            receipt_width = ?15,
+            receipt_width = ?15,  // Always 48 for 80mm thermal
             separator_style = ?16,
             show_invoice_number = ?17,
             currency_position = ?18
