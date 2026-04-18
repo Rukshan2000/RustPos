@@ -29,7 +29,6 @@ const Settings: React.FC = () => {
   const [printerName, setPrinterName] = useState('');
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
-  const [receiptWidth, setReceiptWidth] = useState(32);
   const [separatorStyle, setSeparatorStyle] = useState<'dashes' | 'equals' | 'mixed'>('equals');
   const [showInvoiceNumber, setShowInvoiceNumber] = useState(true);
   const [currencyPosition, setCurrencyPosition] = useState<'before' | 'after'>('before');
@@ -63,7 +62,6 @@ const Settings: React.FC = () => {
       setKioskEnabled(s.kiosk_enabled); setKioskPin(s.kiosk_pin || '');
       setIdleTimeoutMinutes(s.idle_timeout_minutes); setAutoStartKiosk(s.auto_start_kiosk);
       setPrinterName(s.printer_name || ''); setAutoPrintReceipt(s.auto_print_receipt);
-      setReceiptWidth(s.receipt_width || 32);
       setSeparatorStyle((s.separator_style || 'equals') as 'dashes' | 'equals' | 'mixed');
       setShowInvoiceNumber(s.show_invoice_number || true);
       setCurrencyPosition((s.currency_position || 'before') as 'before' | 'after');
@@ -74,7 +72,7 @@ const Settings: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk, printer_name: printerName || null, auto_print_receipt: autoPrintReceipt, receipt_width: receiptWidth, separator_style: separatorStyle, show_invoice_number: showInvoiceNumber, currency_position: currencyPosition });
+      await api.updateSettings({ shop_name: shopName, receipt_text: receiptText, logo_url: logoUrl || null, footer_text: footerText || null, font_size_header: fontSizeHeader, font_size_body: fontSizeBody, font_size_footer: fontSizeFooter, currency, kiosk_enabled: kioskEnabled, kiosk_pin: kioskPin || null, idle_timeout_minutes: idleTimeoutMinutes, auto_start_kiosk: autoStartKiosk, printer_name: printerName || null, auto_print_receipt: autoPrintReceipt, receipt_width: 48, separator_style: separatorStyle, show_invoice_number: showInvoiceNumber, currency_position: currencyPosition });
       await refreshSettings();
       notify("Settings saved successfully!", "success");
     } catch (e) { alertCustom("Error saving settings: " + e, "Settings Error", "error"); }
@@ -630,13 +628,9 @@ const Settings: React.FC = () => {
 
                   <div className="st-form-grid-2">
                     <div className="st-form-group">
-                      <label className="st-label">Receipt Width (characters)</label>
-                      <select className="st-input" value={receiptWidth} onChange={e => setReceiptWidth(parseInt(e.target.value))}>
-                        <option value={32}>32 chars (8cm thermal)</option>
-                        <option value={40}>40 chars (58mm thermal)</option>
-                        <option value={48}>48 chars (80mm thermal)</option>
-                      </select>
-                      <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem', display: 'block' }}>Adjust for your printer width</span>
+                      <label className="st-label">Receipt Width</label>
+                      <div className="st-input" style={{ padding: '0.7rem 0.875rem', backgroundColor: '#f0ebe5', color: '#5a7a6a', display: 'flex', alignItems: 'center' }}>80mm Thermal (48 chars)</div>
+                      <span style={{ fontSize: '0.7rem', color: '#7a9e8a', marginTop: '0.2rem', display: 'block' }}>Fixed to full paper width</span>
                     </div>
 
                     <div className="st-form-group">

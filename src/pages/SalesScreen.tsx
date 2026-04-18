@@ -35,7 +35,7 @@ const SalesScreen: React.FC = () => {
     cur: string,
     shopSettings: typeof settings
   ): string => {
-    const W = shopSettings?.receipt_width || 32; // Use customizable width
+    const W = 48; // Hardcoded to 80mm thermal printer (48 characters)
     const separatorChar = shopSettings?.separator_style === 'dashes' ? '-' : '=';
     const currencyPos = shopSettings?.currency_position || 'before';
     const showInv = shopSettings?.show_invoice_number !== false;
