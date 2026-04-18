@@ -659,6 +659,10 @@ pub fn silent_print(receipt_text: String, printer_name: Option<String>) -> Resul
                 cmd.args(["-d", name]);
             }
         }
+        // Set CUPS options for 80mm thermal printer - full width, no margins
+        cmd.args(["-o", "media=Custom.80x200mm"]);
+        cmd.args(["-o", "cpi=10"]); // characters per inch
+        cmd.args(["-o", "lpi=6"]);  // lines per inch
         cmd.arg(&temp_file);
 
         let output = cmd.output().map_err(|e| {
